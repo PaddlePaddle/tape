@@ -12,8 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-cmake_minimum_required(VERSION 3.0 FATAL_ERROR)
+if(APPLE)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error=pessimizing-move")
+endif(APPLE)
 
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/submodules/bazel.cmake/cmake)
-include(bazel)
-add_subdirectory(src)
+add_subdirectory(fluid)
+
+cc_library(tape_variable SRCS variable.cc DEPS operator)
+cc_library(tape SRCS tape.cc DEPS ${GLOB_OP_LIB} tape_variable)
+
+cc_test(test_tape SRCS test_tape.cc DEPS tape tape_variable)

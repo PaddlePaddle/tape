@@ -1,0 +1,6 @@
+[submodule "submodules/paddle"]
+	path = submodules/paddle
+	url = https://github.com/paddlepaddle/paddle
+[submodule "submodules/bazel.cmake"]
+	path = submodules/bazel.cmake
+	url = https://github.com/gangliao/bazel.cmake
