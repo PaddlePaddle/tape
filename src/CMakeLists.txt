@@ -17,8 +17,11 @@ if(APPLE)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error=pessimizing-move")
 endif(APPLE)
 
-cc_library(tape_variable SRCS variable.cc DEPS ${FLUID_CORE_MODULES} device_context framework_proto proto_desc operator)
-cc_library(tape SRCS tape.cc DEPS ${FLUID_CORE_MODULES} ${GLOB_OP_LIB} tape_variable)
+include_directories(${CMAKE_CURRENT_SRC_DIR}) # for header files in src/
+include_directories(${CMAKE_SRC_DIR}/paddle) # for header files in paddle/
+
+cc_library(tape_variable SRCS variable.cc DEPS operator)
+cc_library(tape SRCS tape.cc DEPS ${GLOB_OP_LIB} tape_variable)
 
 cc_test(test_tape
         SRCS test_tape.cc
