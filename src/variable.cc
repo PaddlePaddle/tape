@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "paddle/contrib/tape/variable.h"
+#include "variable.h"
 
 namespace paddle {
 namespace tape {
