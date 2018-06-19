@@ -18,11 +18,46 @@
 using paddle::tape::VariableHandle;
 using paddle::tape::Variable;
 using paddle::tape::Linear;
+using paddle::tape::Convolution2D;
 using paddle::tape::Mean;
 using paddle::tape::SGD;
 using paddle::tape::Fill;
 using paddle::tape::reset_global_tape;
 using paddle::tape::get_global_tape;
+
+TEST(Tape, TestConv) {
+  LOG(INFO) << "TestConvNet";
+  Convolution2D conv1(3, 16, 3, "relu");
+  Convolution2D conv2(16, 1, 3, "relu");
+  Mean mean;
+
+  SGD sgd(0.001);
+
+  std::string initializer = "fill_constant";
+  paddle::framework::AttributeMap attrs;
+  attrs["dtype"] = paddle::framework::proto::VarType::Type::VarType_Type_FP32;
+  attrs["shape"] = std::vector<int>{32, 3, 8, 8};
+  attrs["value"] = 1.0f;
+  Fill filler(initializer, attrs);
+
+  for (int i = 0; i < 2; ++i) {
+    reset_global_tape();
+
+    VariableHandle input(new Variable("input"));
+    filler(input);
+
+    auto loss = mean(conv2(conv1(input)));
+
+    get_global_tape().Backward(loss);
+
+    for (auto w : conv1.Params()) {
+      sgd.Update(w);
+    }
+    for (auto w : conv2.Params()) {
+      sgd.Update(w);
+    }
+  }
+}
 
 TEST(Tape, TestMLP) {
   LOG(INFO) << "TestMLP";

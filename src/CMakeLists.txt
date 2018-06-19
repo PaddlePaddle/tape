@@ -41,7 +41,8 @@ include_directories(${CMAKE_BINARY_DIR}/third_party/eigen3/src/extern_eigen3)
 
 cc_library(tape_variable SRCS variable.cc DEPS operator)
 cc_library(tape SRCS tape.cc DEPS ${GLOB_OP_LIB} tape_variable)
+cc_library(tape_function SRCS function.cc DEPS ${GLOB_OP_LIB} tape_variable tape)
 
 cc_test(test_tape
         SRCS test_tape.cc
-        DEPS tape tape_variable)
+        DEPS tape tape_variable tape_function)
