@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "function.h"
 #include "gtest/gtest.h"
+#include "src/function.h"
 
 using paddle::tape::VariableHandle;
 using paddle::tape::Variable;
