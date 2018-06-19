@@ -21,6 +21,7 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}) # for header files in src/
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/paddle) # for header files in paddle/
 include_directories("${CMAKE_CURRENT_BINARY_DIR}/../paddle")
 
+
 # the following lines fix include dependencies
 find_package(OpenMP)
 if (OPENMP_FOUND)
