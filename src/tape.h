@@ -18,7 +18,7 @@
 #include <string>
 #include <vector>
 
-#include "paddle/contrib/tape/variable.h"
+#include "variable.h"
 
 namespace paddle {
 namespace tape {

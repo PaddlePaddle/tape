@@ -16,8 +16,8 @@
 
 #include <string>
 
-#include "paddle/contrib/tape/tape.h"
-#include "paddle/contrib/tape/variable.h"
+#include "tape.h"
+#include "variable.h"
 #include "paddle/fluid/framework/type_defs.h"
 
 namespace paddle {
@@ -111,7 +111,7 @@ class SGD {
     init_tape.Forward();
   }
 
-  void operator()(VariableHandle input) {
+  void Update(VariableHandle input) {
     PADDLE_ENFORCE(get_global_tape().HasBeenBackwarded(),
                    "optimization must happen after the backward");
     Tape temp_tape;
