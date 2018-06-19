@@ -29,7 +29,6 @@ if(OPENMP_FOUND)
     set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
 endif()
 
-include_directories(${CMAKE_CURRENT_SRC_DIR}) # for header files in src/
 include_directories(${CMAKE_SOURCE_DIR}/paddle) # for header files in paddle/
 include_directories(${CMAKE_BINARY_DIR}/paddle) # for *.pb.h
 include_directories(${CMAKE_BINARY_DIR}/third_party/install/glog/include)

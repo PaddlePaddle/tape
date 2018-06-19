@@ -14,16 +14,23 @@
 
 #pragma once
 
+#include <cmath>
 #include <string>
+#include <vector>
 
-#include "paddle/contrib/tape/tape.h"
-#include "paddle/contrib/tape/variable.h"
 #include "paddle/fluid/framework/type_defs.h"
+#include "src/tape.h"
+#include "src/variable.h"
 
 namespace paddle {
 namespace tape {
 
 class Function {};
+
+class RandomSeed {
+ public:
+  static int GetRandomSeed() { return 0; }
+};
 
 class Fill {
  public:
@@ -56,17 +63,21 @@ class Linear {
         act_(act) {
     Tape init_tape;
 
-    std::string initializer = "fill_constant";
+    // Use Xavier to initialize Weight
+    float limit = sqrt(6.0 / static_cast<float>(in_dim + out_dim));
     framework::AttributeMap attrs;
-    attrs["dtype"] = paddle::framework::proto::VarType::Type::VarType_Type_FP32;
     attrs["shape"] = std::vector<int>{in_dim, out_dim};
-    attrs["value"] = 1.0f;
-    init_tape.AddOp(initializer, {}, {{"Out", {w_}}}, attrs);
+    attrs["dtype"] = paddle::framework::proto::VarType::Type::VarType_Type_FP32;
+    attrs["min"] = -limit;
+    attrs["max"] = limit;
+    attrs["seed"] = RandomSeed::GetRandomSeed();
+    init_tape.AddOp("uniform_random", {}, {{"Out", {w_}}}, attrs);
 
+    // Use fill zero to initialize Bias
     attrs["dtype"] = paddle::framework::proto::VarType::Type::VarType_Type_FP32;
     attrs["shape"] = std::vector<int>{out_dim};
-    attrs["value"] = 1.0f;
-    init_tape.AddOp(initializer, {}, {{"Out", {b_}}}, attrs);
+    attrs["value"] = 0.0f;
+    init_tape.AddOp("fill_constant", {}, {{"Out", {b_}}}, attrs);
 
     init_tape.Forward();
   }
@@ -98,7 +109,7 @@ class Linear {
 
 class SGD {
  public:
-  SGD(float learning_rate) : learning_rate_(new Variable("sgd")) {
+  explicit SGD(float learning_rate) : learning_rate_(new Variable("sgd")) {
     Tape init_tape;
 
     std::string initializer = "fill_constant";
@@ -111,7 +122,7 @@ class SGD {
     init_tape.Forward();
   }
 
-  void operator()(VariableHandle input) {
+  void Update(VariableHandle input) {
     PADDLE_ENFORCE(get_global_tape().HasBeenBackwarded(),
                    "optimization must happen after the backward");
     Tape temp_tape;
@@ -127,5 +138,5 @@ class SGD {
  private:
   VariableHandle learning_rate_;
 };
-}
-}
+}  // namespace tape
+}  // namespace paddle

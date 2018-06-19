@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "paddle/contrib/tape/tape.h"
+#include "src/tape.h"
 
 #include <list>
 #include <map>
@@ -261,5 +261,5 @@ Tape &get_global_tape() {
 }
 
 void reset_global_tape() { get_global_tape() = Tape(); }
-}
-}
+}  // namespace tape
+}  // namespace paddle

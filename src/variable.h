@@ -14,6 +14,7 @@
 #pragma once
 
 #include <memory>
+#include <string>
 
 #include "paddle/fluid/framework/operator.h"  // framework::kGradVarSuffix
 #include "paddle/fluid/framework/program_desc.h"
@@ -32,7 +33,7 @@ using VariableHandle = std::shared_ptr<Variable>;
  */
 class Variable {
  public:
-  Variable(const std::string pre_fix)
+  explicit Variable(const std::string pre_fix)
       : desc_(pre_fix + std::to_string(count())) {}
 
   Variable(const std::string pre_fix, bool is_grad)
@@ -62,13 +63,13 @@ class Variable {
 
   // void value() {};
 
-  const framework::VarDesc& Desc() const { return desc_; }
-  framework::VarDesc* MutableDesc() { return &desc_; }
+  const framework::VarDesc &Desc() const { return desc_; }
+  framework::VarDesc *MutableDesc() { return &desc_; }
 
   // TODO(tonyyang-svail): No need to expose name
   std::string Name() const { return desc_.Name(); }
 
-  framework::Variable* Var() { return &var_; }
+  framework::Variable *Var() { return &var_; }
 
  private:
   int count() {
@@ -79,7 +80,8 @@ class Variable {
   framework::VarDesc desc_;
   framework::Variable var_;
 
+  // Not own
   std::weak_ptr<Variable> grad_;
 };
-}
-}
+}  // namespace tape
+}  // namespace paddle

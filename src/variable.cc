@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "variable.h"
+#include "src/variable.h"
 
 namespace paddle {
 namespace tape {
@@ -29,5 +29,6 @@ void Variable::InitializeVariable() {
                  var_type);
   }
 }
-}
-}
+
+}  // namespace tape
+}  // namespace paddle
