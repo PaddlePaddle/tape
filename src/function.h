@@ -16,10 +16,11 @@
 
 #include <cmath>
 #include <string>
+#include <vector>
 
-#include "tape.h"
-#include "variable.h"
 #include "paddle/fluid/framework/type_defs.h"
+#include "src/tape.h"
+#include "src/variable.h"
 
 namespace paddle {
 namespace tape {
@@ -28,9 +29,7 @@ class Function {};
 
 class RandomSeed {
  public:
-  static int GetRandomSeed() {
-    return 0;
-  }
+  static int GetRandomSeed() { return 0; }
 };
 
 class Fill {
@@ -65,7 +64,7 @@ class Linear {
     Tape init_tape;
 
     // Use Xavier to initialize Weight
-    float limit = sqrt(6.0 / float(in_dim + out_dim));
+    float limit = sqrt(6.0 / static_cast<float>(in_dim + out_dim));
     framework::AttributeMap attrs;
     attrs["shape"] = std::vector<int>{in_dim, out_dim};
     attrs["dtype"] = paddle::framework::proto::VarType::Type::VarType_Type_FP32;
@@ -110,7 +109,7 @@ class Linear {
 
 class SGD {
  public:
-  SGD(float learning_rate) : learning_rate_(new Variable("sgd")) {
+  explicit SGD(float learning_rate) : learning_rate_(new Variable("sgd")) {
     Tape init_tape;
 
     std::string initializer = "fill_constant";
@@ -139,5 +138,5 @@ class SGD {
  private:
   VariableHandle learning_rate_;
 };
-}
-}
+}  // namespace tape
+}  // namespace paddle

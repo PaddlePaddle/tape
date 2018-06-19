@@ -18,7 +18,7 @@
 #include <string>
 #include <vector>
 
-#include "variable.h"
+#include "src/variable.h"
 
 namespace paddle {
 namespace tape {
@@ -60,5 +60,5 @@ class Tape {
 Tape &get_global_tape();
 
 void reset_global_tape();
-}
-}
+}  // namespace tape
+}  // namespace paddle
