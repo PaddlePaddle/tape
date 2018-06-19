@@ -12,10 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "gtest/gtest.h"
 #include "paddle/contrib/tape/function.h"
+#include "gtest/gtest.h"
 
-using namespace paddle::tape;
+using paddle::tape::VariableHandle;
+using paddle::tape::Variable;
+using paddle::tape::Linear;
+using paddle::tape::Mean;
+using paddle::tape::SGD;
+using paddle::tape::Fill;
+using paddle::tape::reset_global_tape;
+using paddle::tape::get_global_tape;
 
 TEST(Tape, TestMLP) {
   LOG(INFO) << "TestMLP";
@@ -51,7 +58,7 @@ TEST(Tape, TestMLP) {
   }
 }
 
-int main(int argc, char** argv) {
+int main(int argc, char **argv) {
   std::vector<paddle::platform::Place> places;
   places.emplace_back(paddle::platform::CPUPlace());
   paddle::platform::DeviceContextPool::Init(places);
