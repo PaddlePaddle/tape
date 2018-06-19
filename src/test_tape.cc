@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "paddle/contrib/tape/function.h"
+#include "function.h"
 #include "gtest/gtest.h"
 
 using paddle::tape::VariableHandle;
@@ -50,10 +50,10 @@ TEST(Tape, TestMLP) {
     get_global_tape().Backward(loss);
 
     for (auto w : linear1.Params()) {
-      sgd(w);
+      sgd.Update(w);
     }
     for (auto w : linear2.Params()) {
-      sgd(w);
+      sgd.Update(w);
     }
   }
 }
