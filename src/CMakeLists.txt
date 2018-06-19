@@ -20,6 +20,15 @@ endif(APPLE)
 CheckCompilerCXX11Flag()
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 
+# Some Paddle Operators uses OMP, e.g.
+# https://github.com/PaddlePaddle/Paddle/blob/d00a0436b1c562060b49aa2981be094d78bcbdf5/paddle/fluid/operators/top_k_op.h#L58-L60
+find_package(OpenMP)
+if(OPENMP_FOUND)
+    set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+    set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+    set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
+endif()
+
 include_directories(${CMAKE_CURRENT_SRC_DIR}) # for header files in src/
 include_directories(${CMAKE_SOURCE_DIR}/paddle) # for header files in paddle/
 include_directories(${CMAKE_BINARY_DIR}/paddle) # for *.pb.h

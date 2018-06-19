@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.0)
 
 include_directories(${CMAKE_CURRENT_SRC_DIR}/paddle)
 add_subdirectory(paddle)
