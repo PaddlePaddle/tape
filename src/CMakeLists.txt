@@ -17,8 +17,19 @@ if(APPLE)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error=pessimizing-move")
 endif(APPLE)
 
+CheckCompilerCXX11Flag()
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+
 include_directories(${CMAKE_CURRENT_SRC_DIR}) # for header files in src/
-include_directories(${CMAKE_SRC_DIR}/paddle) # for header files in paddle/
+include_directories(${CMAKE_SOURCE_DIR}/paddle) # for header files in paddle/
+include_directories(${CMAKE_BINARY_DIR}/paddle) # for *.pb.h
+include_directories(${CMAKE_BINARY_DIR}/third_party/install/glog/include)
+include_directories(${CMAKE_BINARY_DIR}/third_party/install/gflags/include)
+include_directories(${CMAKE_BINARY_DIR}/third_party/install/protobuf/include)
+include_directories(${CMAKE_BINARY_DIR}/third_party/install/gtest/include)
+include_directories(${CMAKE_BINARY_DIR}/third_party/boost/src/extern_boost/boost_1_41_0/) # hack in paddle/cmake/external/boost.cmake
+include_directories(${CMAKE_BINARY_DIR}/third_party/eigen3/src/extern_eigen3)
+# hack in paddle/cmake/external/eigen.cmake
 
 cc_library(tape_variable SRCS variable.cc DEPS operator)
 cc_library(tape SRCS tape.cc DEPS ${GLOB_OP_LIB} tape_variable)
