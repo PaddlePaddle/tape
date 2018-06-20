@@ -1,0 +1,3 @@
+[submodule "bazel.cmake"]
+	path = bazel.cmake
+	url = https://github.com/gangliao/bazel.cmake
