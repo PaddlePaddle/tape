@@ -75,6 +75,16 @@ class Variable {
   const framework::Variable& Var() const { return var_; }
   framework::Variable* MutableVar() { return &var_; }
 
+  template <typename T>
+  const T& Get() const {
+    return var_.Get<T>();
+  }
+
+  template <typename T>
+  T* GetMutable() {
+    return var_.GetMutable<T>();
+  }
+
  private:
   int count() {
     static int counter = 0;
