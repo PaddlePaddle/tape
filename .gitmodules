@@ -1,3 +1,0 @@
-[submodule "paddle"]
-	path = paddle
-	url = https://github.com/PaddlePaddle/Paddle
