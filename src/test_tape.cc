@@ -25,6 +25,26 @@ using paddle::tape::Fill;
 using paddle::tape::reset_global_tape;
 using paddle::tape::get_global_tape;
 
+TEST(Tape, TestRelu) {
+  LOG(INFO) << "TestRelu";
+  std::string initializer = "fill_constant";
+  paddle::framework::AttributeMap attrs;
+  attrs["dtype"] = paddle::framework::proto::VarType::Type::VarType_Type_FP32;
+  attrs["shape"] = std::vector<int>{32, 3, 8, 8};
+  attrs["value"] = 1.0f;
+  Fill filler(initializer, attrs);
+
+  for (int i = 0; i < 2; ++i) {
+    reset_global_tape();
+
+    VariableHandle input(new Variable("input"));
+    filler(input);
+
+    auto loss = relu(input);
+    LOG(INFO) << loss->Value();
+  }
+}
+
 TEST(Tape, TestConv) {
   LOG(INFO) << "TestConvNet";
   Convolution2D conv1(3, 16, 3, "relu");
@@ -81,7 +101,7 @@ TEST(Tape, TestMLP) {
     filler(input);
 
     auto loss = mean(linear2(linear1(input)));
-    LOG(INFO) << loss->value();
+    LOG(INFO) << loss->Value();
 
     get_global_tape().Backward(loss);
 

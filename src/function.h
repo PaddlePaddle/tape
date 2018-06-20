@@ -55,6 +55,12 @@ class Mean {
   }
 };
 
+VariableHandle relu(VariableHandle x) {
+  VariableHandle out(new Variable("relu"));
+  get_global_tape().AddOp("relu", {{"X", {x}}}, {{"Out", {out}}}, {});
+  return out;
+}
+
 class Linear {
  public:
   Linear(int in_dim, int out_dim, const std::string &act)
