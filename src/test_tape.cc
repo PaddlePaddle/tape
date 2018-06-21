@@ -22,11 +22,42 @@ using paddle::tape::Convolution2D;
 using paddle::tape::Mean;
 using paddle::tape::SGD;
 using paddle::tape::Fill;
+using paddle::tape::softmax;
+using paddle::tape::cross_entropy;
 using paddle::tape::reset_global_tape;
 using paddle::tape::get_global_tape;
 
+TEST(Tape, TestSoftmax) {
+  std::string data_initializer = "uniform_random";
+  paddle::framework::AttributeMap data_attrs;
+  data_attrs["min"] = -1.0f;
+  data_attrs["max"] = 1.0f;
+  data_attrs["dtype"] =
+      paddle::framework::proto::VarType::Type::VarType_Type_FP32;
+  data_attrs["shape"] = std::vector<int>{10, 10};
+  data_attrs["seed"] = 123;
+  Fill data_filler(data_initializer, data_attrs);
+
+  std::string label_initializer = "fill_constant";
+  paddle::framework::AttributeMap label_attrs;
+  label_attrs["dtype"] =
+      paddle::framework::proto::VarType::Type::VarType_Type_INT64;
+  label_attrs["shape"] = std::vector<int>{10, 1};
+  label_attrs["value"] = 1.0f;
+  Fill label_filler(label_initializer, label_attrs);
+
+  VariableHandle input(new Variable("input"));
+  data_filler(input);
+  VariableHandle label(new Variable("input"));
+  label_filler(label);
+
+  auto loss = cross_entropy(softmax(input), label);
+
+  LOG(INFO) << input->Value();
+  LOG(INFO) << loss->Value();
+}
+
 TEST(Tape, TestRelu) {
-  LOG(INFO) << "TestRelu";
   std::string initializer = "uniform_random";
   paddle::framework::AttributeMap attrs;
   attrs["min"] = -1.0f;
@@ -44,7 +75,6 @@ TEST(Tape, TestRelu) {
 }
 
 TEST(Tape, TestConv) {
-  LOG(INFO) << "TestConvNet";
   Convolution2D conv1(3, 16, 3, "relu");
   Convolution2D conv2(16, 1, 3, "relu");
   Mean mean;
@@ -78,7 +108,6 @@ TEST(Tape, TestConv) {
 }
 
 TEST(Tape, TestMLP) {
-  LOG(INFO) << "TestMLP";
   Linear linear1(3, 3, "relu");
   Linear linear2(3, 3, "relu");
   Mean mean;
