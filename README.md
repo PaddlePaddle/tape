@@ -215,7 +215,7 @@ digraph G {
 }
 </details>
 
-![Image](https://github.com/tonyyang-svail/Paddle/blob/cpp_tap/paddle/contrib/tape/computation_graph.png)
+![Image](https://github.com/PaddlePaddle/tape/blob/develop/doc/images/computation_graph.png)
 
 ## Code Reuse
 
