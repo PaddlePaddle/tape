@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "src/variable.h"
+#include <paddle/paddle/fluid/framework/reader.h>
 
 #include "src/tape.h"
 
@@ -37,6 +38,8 @@ void Variable::InitializeVariable() {
     var_.GetMutable<framework::LoDTensor>();
   } else if (var_type == framework::proto::VarType::SELECTED_ROWS) {
     var_.GetMutable<framework::SelectedRows>();
+  } else if (var_type == framework::proto::VarType::READER) {
+    var_.GetMutable<framework::ReaderHolder>();
   } else {
     PADDLE_THROW("Variable type %d is not in [LOD_TENSOR, SELECTED_ROWS]",
                  var_type);

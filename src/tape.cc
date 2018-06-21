@@ -125,7 +125,7 @@ void Tape::AddOp(const std::string &type,
                  const VariableHandleMap &in_vars,
                  VariableHandleMap out_vars,
                  const framework::AttributeMap &attrs) {
-  InferShapeAndVarType(type, in_vars, &out_vars, attrs);
+  // InferShapeAndVarType(type, in_vars, &out_vars, attrs);
   tape_.emplace_back(type, in_vars, out_vars, attrs);
 }
 

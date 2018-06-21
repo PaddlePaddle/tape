@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "gtest/gtest.h"
+#include "paddle/fluid/framework/reader.h"
 #include "src/function.h"
 
 using paddle::tape::VariableHandle;
@@ -24,6 +25,37 @@ using paddle::tape::Fill;
 using paddle::tape::reset_global_tape;
 using paddle::tape::get_global_tape;
 
+VariableHandle create_recordio_file_reader(std::string filename,
+                                           std::vector<int> shape_concat,
+                                           std::vector<int> ranks,
+                                           std::vector<int> lod_levels) {
+  VariableHandle reader(new paddle::tape::Variable("reader"));
+  reader->MutableDesc()->SetType(paddle::framework::proto::VarType::READER);
+
+  paddle::tape::Tape init_tape;
+  init_tape.AddOp("create_recordio_file_reader",
+                  {},
+                  {{"Out", {reader}}},
+                  {{"filename", filename},
+                   {"shape_concat", shape_concat},
+                   {"ranks", ranks},
+                   {"lod_levels", lod_levels}});
+  init_tape.Forward();
+
+  return reader;
+}
+
+TEST(Tape, TestReader) {
+  VariableHandle data_label(new paddle::tape::Variable("data_label"));
+  VariableHandle reader = create_recordio_file_reader(
+      "./data/mnist.recordio", {-1, 784, -1, 1}, {2, 2}, {0, 0});
+
+  reader->MutableVar()->GetMutable<paddle::framework::ReaderHolder>()->ReadNext(
+      data_label->MutableVar()
+          ->GetMutable<paddle::framework::LoDTensorArray>());
+}
+
+/*
 TEST(Tape, TestMLP) {
   LOG(INFO) << "TestMLP";
   Linear linear1(3, 3, "relu");
@@ -58,6 +90,7 @@ TEST(Tape, TestMLP) {
     }
   }
 }
+*/
 
 int main(int argc, char **argv) {
   std::vector<paddle::platform::Place> places;

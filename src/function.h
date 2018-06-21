@@ -138,5 +138,6 @@ class SGD {
  private:
   VariableHandle learning_rate_;
 };
+
 }  // namespace tape
 }  // namespace paddle
