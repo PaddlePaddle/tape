@@ -48,7 +48,7 @@ VariableHandle create_recordio_file_reader(std::string filename,
 TEST(Tape, TestReader) {
   VariableHandle data_label(new paddle::tape::Variable("data_label"));
   VariableHandle reader = create_recordio_file_reader(
-      "./data/mnist.recordio", {-1, 784, -1, 1}, {2, 2}, {0, 0});
+      "/tape/src/data/mnist.recordio", {32, 784, 32, 1}, {2, 2}, {0, 0});
 
   reader->MutableVar()->GetMutable<paddle::framework::ReaderHolder>()->ReadNext(
       data_label->MutableVar()

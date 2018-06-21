@@ -24,7 +24,7 @@ def create_recordio_files():
         feeder = fluid.DataFeeder(
             feed_list=[  # order is image and label
                 fluid.layers.data(
-                    name='image', shape=[784]),
+                    name='image', shape=[784], dtype='float32'),
                 fluid.layers.data(
                     name='label', shape=[1], dtype='int64'),
             ],
