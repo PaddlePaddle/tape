@@ -93,6 +93,7 @@ void InferShapeAndVarType(const std::string &type,
                           VariableHandleMap *out_vars,
                           const framework::AttributeMap &attrs) {
   framework::OpDesc op_desc = CreateOpDesc(type, in_vars, *out_vars, attrs);
+  op_desc.CheckAttrs();
 
   // Create a temporary block for compile-time
   framework::ProgramDesc program_desc;

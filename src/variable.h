@@ -64,7 +64,7 @@ class Variable {
   //            const framework::AttributeMap& attrs);
 
   // Evaluate a variable by running Forward() on the global tape
-  const Variable& value();
+  const Variable& Value();
 
   const framework::VarDesc& Desc() const { return desc_; }
   framework::VarDesc* MutableDesc() { return &desc_; }
@@ -74,6 +74,16 @@ class Variable {
 
   const framework::Variable& Var() const { return var_; }
   framework::Variable* MutableVar() { return &var_; }
+
+  template <typename T>
+  const T& Get() const {
+    return var_.Get<T>();
+  }
+
+  template <typename T>
+  T* GetMutable() {
+    return var_.GetMutable<T>();
+  }
 
  private:
   int count() {

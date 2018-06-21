@@ -52,7 +52,7 @@ void Variable::InitializeVariable() {
   }
 }
 
-const Variable& Variable::value() {
+const Variable& Variable::Value() {
   get_global_tape().Forward();
   return *this;
 }
