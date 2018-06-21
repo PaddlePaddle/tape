@@ -245,9 +245,8 @@ void ReadNext(VariableHandle reader, VariableHandle data_holder) {
   PADDLE_ENFORCE_EQ(data_holder->Desc().GetType(),
                     paddle::framework::proto::VarType::LOD_TENSOR_ARRAY);
 
-  reader->MutableVar()->GetMutable<paddle::framework::ReaderHolder>()->ReadNext(
-      data_holder->MutableVar()
-          ->GetMutable<paddle::framework::LoDTensorArray>());
+  reader->GetMutable<paddle::framework::ReaderHolder>()->ReadNext(
+      data_holder->GetMutable<paddle::framework::LoDTensorArray>());
 }
 
 }  // namespace tape
