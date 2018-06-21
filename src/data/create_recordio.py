@@ -17,21 +17,21 @@ import paddle.v2 as paddle
 import paddle.v2.dataset.mnist as mnist
 
 
-def create_recordio_files():
+def create_mnist_recordio_files():
     # Convert mnist to recordio file
     with fluid.program_guard(fluid.Program(), fluid.Program()):
         reader = paddle.batch(mnist.train(), batch_size=32)
         feeder = fluid.DataFeeder(
             feed_list=[  # order is image and label
                 fluid.layers.data(
-                    name='image', shape=[784], dtype='float32'),
+                    name='image', shape=[1, 28, 28], dtype='float32'),
                 fluid.layers.data(
                     name='label', shape=[1], dtype='int64'),
             ],
             place=fluid.CPUPlace())
         fluid.recordio_writer.convert_reader_to_recordio_file(
-            './mnist.recordio', reader, feeder)
+            '/tape/src/data/mnist.recordio', reader, feeder)
 
 
 if __name__ == "__main__":
-    create_recordio_files()
+    create_mnist_recordio_files()

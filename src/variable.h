@@ -87,5 +87,6 @@ class Variable {
   // Not own
   std::weak_ptr<Variable> grad_;
 };
+
 }  // namespace tape
 }  // namespace paddle

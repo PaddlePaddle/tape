@@ -25,6 +25,11 @@ namespace tape {
 
 using VariableHandleMap = std::map<std::string, std::vector<VariableHandle>>;
 
+framework::OpDesc CreateOpDesc(const std::string &type,
+                               const VariableHandleMap &in_vars,
+                               const VariableHandleMap &out_vars,
+                               const framework::AttributeMap &attrs);
+
 struct OpHandle {
   OpHandle(const std::string &type,
            const VariableHandleMap &in_vars,
@@ -36,6 +41,34 @@ struct OpHandle {
   VariableHandleMap inputs_;
   VariableHandleMap outputs_;
   framework::AttributeMap attrs_;
+};
+
+// Temporary Scope for Operator::Run()
+class ScopeWrapper : public framework::Scope {
+ public:
+  ScopeWrapper(const VariableHandleMap &in_vars,
+               const VariableHandleMap &out_vars) {
+    for (auto &v : in_vars) {
+      for (auto &vv : v.second) {
+        if (!vars_.count(vv->Name())) {
+          vars_[vv->Name()].reset(vv->MutableVar());
+        }
+      }
+    }
+    for (auto &v : out_vars) {
+      for (auto &vv : v.second) {
+        if (!vars_.count(vv->Name())) {
+          vars_[vv->Name()].reset(vv->MutableVar());
+        }
+      }
+    }
+  }
+
+  ~ScopeWrapper() {
+    for (auto &pair : vars_) {
+      pair.second.release();
+    }
+  }
 };
 
 class Tape {
