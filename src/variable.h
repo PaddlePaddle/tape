@@ -64,7 +64,7 @@ class Variable {
   //            const framework::AttributeMap& attrs);
 
   // Evaluate a variable by running Forward() on the global tape
-  const Variable& value();
+  const Variable& Value();
 
   const framework::VarDesc& Desc() const { return desc_; }
   framework::VarDesc* MutableDesc() { return &desc_; }

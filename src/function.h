@@ -55,6 +55,25 @@ class Mean {
   }
 };
 
+VariableHandle relu(VariableHandle x) {
+  VariableHandle out(new Variable("relu"));
+  get_global_tape().AddOp("relu", {{"X", {x}}}, {{"Out", {out}}}, {});
+  return out;
+}
+
+VariableHandle softmax(VariableHandle x) {
+  VariableHandle out(new Variable("softmax"));
+  get_global_tape().AddOp("softmax", {{"X", {x}}}, {{"Out", {out}}}, {});
+  return out;
+}
+
+VariableHandle cross_entropy(VariableHandle x, VariableHandle label) {
+  VariableHandle out(new Variable("cross_entropy"));
+  get_global_tape().AddOp(
+      "cross_entropy", {{"X", {x}}, {"Label", {label}}}, {{"Y", {out}}}, {});
+  return out;
+}
+
 class Linear {
  public:
   Linear(int in_dim, int out_dim, const std::string &act)
@@ -94,6 +113,65 @@ class Linear {
                             {{"Out", {pre_act}}},
                             {{"axis", 1}});
     VariableHandle post_act(new Variable("linear"));
+    get_global_tape().AddOp(
+        act_, {{"X", {pre_act}}}, {{"Out", {post_act}}}, {});
+    return post_act;
+  }
+
+  std::vector<VariableHandle> Params() { return {w_, b_}; }
+
+ private:
+  VariableHandle w_;
+  VariableHandle b_;
+  std::string act_;
+};
+
+class Convolution2D {
+ public:
+  Convolution2D(int c_in, int c_out, int f, std::string act)
+      : w_(new Variable("ConvolutionWeight")),
+        b_(new Variable("ConvolutionBias")),
+        act_(act) {
+    Tape init_tape;
+
+    // Use Xavier to initialize Weight
+    float fan_in = c_in * f * f, fan_out = c_out * f * f;
+    float limit = sqrt(6.0 / (fan_in + fan_out));
+    framework::AttributeMap attrs;
+    attrs["shape"] = std::vector<int>{c_out, c_in, f, f};
+    attrs["dtype"] = paddle::framework::proto::VarType::Type::VarType_Type_FP32;
+    attrs["min"] = -limit;
+    attrs["max"] = limit;
+    attrs["seed"] = RandomSeed::GetRandomSeed();
+    init_tape.AddOp("uniform_random", {}, {{"Out", {w_}}}, attrs);
+
+    // Use fill zero to initialize Bias
+    attrs["dtype"] = paddle::framework::proto::VarType::Type::VarType_Type_FP32;
+    attrs["shape"] = std::vector<int>{c_out};
+    attrs["value"] = 0.0f;
+    init_tape.AddOp("fill_constant", {}, {{"Out", {b_}}}, attrs);
+
+    init_tape.Forward();
+  }
+
+  VariableHandle operator()(VariableHandle input) {
+    VariableHandle pre_bias(new Variable("conv"));
+    get_global_tape().AddOp("conv2d",
+                            {{"Input", {input}}, {"Filter", {w_}}},
+                            {{"Output", {pre_bias}}},
+                            {{"strides", std::vector<int>{1, 1}},
+                             {"paddings", std::vector<int>{0, 0}},
+                             {"dilations", std::vector<int>{1, 1}},
+                             {"groups", 1},
+                             {"use_cudnn", false},
+                             {"use_mkldnn", false},
+                             {"data_format", std::string("AnyLayout")}});
+    VariableHandle pre_act(new Variable("conv"));
+    get_global_tape().AddOp("elementwise_add",
+                            {{"X", {pre_bias}}, {"Y", {b_}}},
+                            {{"Out", {pre_act}}},
+                            {{"axis", 1}});
+    VariableHandle post_act(new Variable("conv"));
     get_global_tape().AddOp(
         act_, {{"X", {pre_act}}}, {{"Out", {post_act}}}, {});
     return post_act;
