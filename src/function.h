@@ -57,6 +57,22 @@ class Fill {
   const framework::AttributeMap attrs_;
 };
 
+void init_params(VariableHandle v,
+                 const std::string &initializer,
+                 const framework::AttributeMap &attrs) {
+  if (initializer == "fill_constant") {
+    // fill_constant is not OperatorWithKernel, so we can't add it to the tape
+    framework::OpDesc op_desc =
+        CreateOpDesc(initializer, {}, {{"Out", {v}}}, attrs);
+    ScopeWrapper scope({}, {{"Out", {v}}});
+    framework::OpRegistry::CreateOp(op_desc)->Run(scope, platform::CPUPlace());
+  } else {
+    Tape init_tape;
+    init_tape.AddOp(initializer, {}, {{"Out", {v}}}, attrs);
+    init_tape.Forward();
+  }
+}
+
 class Linear {
  public:
   Linear(int in_dim, int out_dim, const std::string &act)
@@ -188,20 +204,17 @@ class SGD {
   VariableHandle learning_rate_;
 };
 
-void init_params(VariableHandle v,
-                 const std::string &initializer,
-                 const framework::AttributeMap &attrs) {
-  if (initializer == "fill_constant") {
-    // fill_constant is not OperatorWithKernel, so we can't add it to the tape
-    framework::OpDesc op_desc =
-        CreateOpDesc(initializer, {}, {{"Out", {v}}}, attrs);
-    ScopeWrapper scope({}, {{"Out", {v}}});
-    framework::OpRegistry::CreateOp(op_desc)->Run(scope, platform::CPUPlace());
-  } else {
-    Tape init_tape;
-    init_tape.AddOp(initializer, {}, {{"Out", {v}}}, attrs);
-    init_tape.Forward();
-  }
+VariableHandle dropout(VariableHandle x) {
+  VariableHandle out(new Variable("dropout"));
+  VariableHandle mask(new Variable("mask"));
+  get_global_tape().AddOp("dropout",
+                          {{"X", {x}}},
+                          {{"Out", {out}}, {"Mask", {mask}}},
+                          {{"dropout_prob", .5f},
+                           {"is_test", false},
+                           {"fix_seed", false},
+                           {"seed", RandomSeed::GetRandomSeed()}});
+  return out;
 }
 
 VariableHandle mean(VariableHandle x) {

@@ -37,6 +37,23 @@ TEST(Tape, TestReader) {
   LOG(INFO) << *data_label;
 }
 
+TEST(Tape, TestDropout) {
+  std::string initializer = "fill_constant";
+  paddle::framework::AttributeMap attrs;
+  attrs["dtype"] = paddle::framework::proto::VarType::Type::VarType_Type_FP32;
+  attrs["shape"] = std::vector<int>{3, 3};
+  attrs["value"] = 1.0f;
+  Fill filler(initializer, attrs);
+
+  VariableHandle input(new Variable("input"));
+  filler(input);
+  auto loss = dropout(input);
+  LOG(INFO) << input->Value();
+  LOG(INFO) << loss->Value();
+
+  get_global_tape().Backward(loss);
+}
+
 TEST(Tape, TestRelu) {
   std::string initializer = "uniform_random";
   paddle::framework::AttributeMap attrs;
