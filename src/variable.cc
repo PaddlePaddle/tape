@@ -22,10 +22,9 @@ namespace tape {
 
 std::ostream& operator<<(std::ostream& os, const Variable& var) {
   LOG(INFO) << "Printing " << var.Name();
-  framework::proto::VarType::Type var_type = var.Desc().GetType();
-  if (var_type == framework::proto::VarType::LOD_TENSOR) {
+  if (var.Var().IsType<framework::LoDTensor>()) {
     os << var.Var().Get<framework::LoDTensor>();
-  } else if (var_type = framework::proto::VarType::LOD_TENSOR_ARRAY) {
+  } else if (var.Var().IsType<framework::LoDTensorArray>()) {
     framework::LoDTensorArray array =
         var.Var().Get<framework::LoDTensorArray>();
     for (size_t i = 0; i < array.size(); ++i) {
@@ -37,19 +36,6 @@ std::ostream& operator<<(std::ostream& os, const Variable& var) {
     PADDLE_THROW("Variable type is not in [LOD_TENSOR, LOD_TENSOR_ARRAY]");
   }
   return os;
-}
-
-void Variable::InitializeVariable() {
-  LOG(INFO) << "Initialzing " << desc_.Name() << " as " << desc_.GetType();
-  framework::proto::VarType::Type var_type = desc_.GetType();
-  if (var_type == framework::proto::VarType::LOD_TENSOR) {
-    var_.GetMutable<framework::LoDTensor>();
-  } else if (var_type == framework::proto::VarType::SELECTED_ROWS) {
-    var_.GetMutable<framework::SelectedRows>();
-  } else {
-    PADDLE_THROW("Variable type %d is not in [LOD_TENSOR, SELECTED_ROWS]",
-                 var_type);
-  }
 }
 
 const Variable& Variable::Value() {
