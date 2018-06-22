@@ -52,7 +52,7 @@ TEST(Tape, TestMnist) {
   int print_step = 100;
   float avg_loss = 0.0;
 
-  for (int i = 0; i < 1000000; ++i) {
+  for (int i = 0; i < 1000; ++i) {
     reset_global_tape();
     auto data_label = ReadNext(reader);
     auto data = data_label[0];
