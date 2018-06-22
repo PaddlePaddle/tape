@@ -18,6 +18,8 @@
 #include <string>
 #include <vector>
 
+#include "paddle/fluid/framework/op_registry.h"
+#include "paddle/fluid/framework/reader.h"
 #include "paddle/fluid/framework/type_defs.h"
 #include "src/tape.h"
 #include "src/variable.h"
@@ -216,5 +218,36 @@ class SGD {
  private:
   VariableHandle learning_rate_;
 };
+
+VariableHandle CreateRecordioFileReader(std::string filename,
+                                        std::vector<int> shape_concat,
+                                        std::vector<int> ranks,
+                                        std::vector<int> lod_levels) {
+  VariableHandle reader(new paddle::tape::Variable("reader"));
+  reader->MutableDesc()->SetType(paddle::framework::proto::VarType::READER);
+
+  framework::OpDesc op_desc = CreateOpDesc("create_recordio_file_reader",
+                                           {},
+                                           {{"Out", {reader}}},
+                                           {{"filename", filename},
+                                            {"shape_concat", shape_concat},
+                                            {"ranks", ranks},
+                                            {"lod_levels", lod_levels}});
+  ScopeWrapper scope({}, {{"Out", {reader}}});
+  framework::OpRegistry::CreateOp(op_desc)->Run(scope, platform::CPUPlace());
+
+  return reader;
+}
+
+void ReadNext(VariableHandle reader, VariableHandle data_holder) {
+  PADDLE_ENFORCE_EQ(reader->Desc().GetType(),
+                    paddle::framework::proto::VarType::READER);
+  PADDLE_ENFORCE_EQ(data_holder->Desc().GetType(),
+                    paddle::framework::proto::VarType::LOD_TENSOR_ARRAY);
+
+  reader->GetMutable<paddle::framework::ReaderHolder>()->ReadNext(
+      data_holder->GetMutable<paddle::framework::LoDTensorArray>());
+}
+
 }  // namespace tape
 }  // namespace paddle

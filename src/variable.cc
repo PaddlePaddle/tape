@@ -14,6 +14,7 @@
 
 #include "src/variable.h"
 
+#include <paddle/paddle/fluid/framework/lod_tensor_array.h>
 #include "src/tape.h"
 
 namespace paddle {
@@ -24,8 +25,16 @@ std::ostream& operator<<(std::ostream& os, const Variable& var) {
   framework::proto::VarType::Type var_type = var.Desc().GetType();
   if (var_type == framework::proto::VarType::LOD_TENSOR) {
     os << var.Var().Get<framework::LoDTensor>();
+  } else if (var_type = framework::proto::VarType::LOD_TENSOR_ARRAY) {
+    framework::LoDTensorArray array =
+        var.Var().Get<framework::LoDTensorArray>();
+    for (size_t i = 0; i < array.size(); ++i) {
+      os << "Printing lod_tensor #" << i << " in lod_tensor_array "
+         << var.Name() << "\n";
+      os << array[i] << "\n";
+    }
   } else {
-    PADDLE_THROW("Variable type is not LOD_TENSOR");
+    PADDLE_THROW("Variable type is not in [LOD_TENSOR, LOD_TENSOR_ARRAY]");
   }
   return os;
 }

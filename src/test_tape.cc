@@ -26,6 +26,20 @@ using paddle::tape::softmax;
 using paddle::tape::cross_entropy;
 using paddle::tape::reset_global_tape;
 using paddle::tape::get_global_tape;
+using paddle::tape::CreateRecordioFileReader;
+using paddle::tape::ReadNext;
+
+TEST(Tape, TestReader) {
+  VariableHandle data_label(new paddle::tape::Variable("data_label"));
+  data_label->MutableDesc()->SetType(
+      paddle::framework::proto::VarType::LOD_TENSOR_ARRAY);
+
+  VariableHandle reader = CreateRecordioFileReader(
+      "/tape/src/data/mnist.recordio", {32, 1, 28, 28, 32, 1}, {4, 2}, {0, 0});
+
+  ReadNext(reader, data_label);
+  LOG(INFO) << *data_label;
+}
 
 TEST(Tape, TestSoftmax) {
   std::string data_initializer = "uniform_random";
