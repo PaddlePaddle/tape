@@ -17,17 +17,14 @@
 #include "gtest/gtest.h"
 #include "src/function.h"
 
-using paddle::tape::VariableHandle;
-using paddle::tape::Variable;
 using paddle::tape::Linear;
-using paddle::tape::Convolution2D;
 using paddle::tape::SGD;
-using paddle::tape::Fill;
 using paddle::tape::mean;
 using paddle::tape::softmax;
 using paddle::tape::cross_entropy;
 using paddle::tape::reset_global_tape;
 using paddle::tape::get_global_tape;
+
 using paddle::tape::CreateRecordioFileReader;
 using paddle::tape::ReadNext;
 
@@ -40,7 +37,7 @@ TEST(Mnist, TestCPU) {
   std::string filename = "/tmp/mnist.recordio";
   PADDLE_ENFORCE(is_file_exist(filename),
                  "file doesn't exist; have you run create_mnist_recordio.py");
-  VariableHandle reader = CreateRecordioFileReader(
+  auto reader = CreateRecordioFileReader(
       filename, {32, 1, 28, 28, 32, 1}, {4, 2}, {0, 0});
 
   Linear linear1(784, 200, "relu");
