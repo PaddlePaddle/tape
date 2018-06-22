@@ -19,9 +19,9 @@ using paddle::tape::VariableHandle;
 using paddle::tape::Variable;
 using paddle::tape::Linear;
 using paddle::tape::Convolution2D;
-using paddle::tape::Mean;
 using paddle::tape::SGD;
 using paddle::tape::Fill;
+using paddle::tape::mean;
 using paddle::tape::softmax;
 using paddle::tape::cross_entropy;
 using paddle::tape::reset_global_tape;
@@ -91,7 +91,6 @@ TEST(Tape, TestRelu) {
 TEST(Tape, TestConv) {
   Convolution2D conv1(3, 16, 3, "relu");
   Convolution2D conv2(16, 1, 3, "relu");
-  Mean mean;
 
   SGD sgd(0.001);
 
@@ -124,7 +123,6 @@ TEST(Tape, TestConv) {
 TEST(Tape, TestMLP) {
   Linear linear1(3, 3, "relu");
   Linear linear2(3, 3, "relu");
-  Mean mean;
 
   SGD sgd(0.001);
 

@@ -48,34 +48,6 @@ class Fill {
   const framework::AttributeMap attrs_;
 };
 
-class Mean {
- public:
-  VariableHandle operator()(VariableHandle var) {
-    VariableHandle out(new Variable("mean"));
-    get_global_tape().AddOp("mean", {{"X", {var}}}, {{"Out", {out}}}, {});
-    return out;
-  }
-};
-
-VariableHandle relu(VariableHandle x) {
-  VariableHandle out(new Variable("relu"));
-  get_global_tape().AddOp("relu", {{"X", {x}}}, {{"Out", {out}}}, {});
-  return out;
-}
-
-VariableHandle softmax(VariableHandle x) {
-  VariableHandle out(new Variable("softmax"));
-  get_global_tape().AddOp("softmax", {{"X", {x}}}, {{"Out", {out}}}, {});
-  return out;
-}
-
-VariableHandle cross_entropy(VariableHandle x, VariableHandle label) {
-  VariableHandle out(new Variable("cross_entropy"));
-  get_global_tape().AddOp(
-      "cross_entropy", {{"X", {x}}, {"Label", {label}}}, {{"Y", {out}}}, {});
-  return out;
-}
-
 class Linear {
  public:
   Linear(int in_dim, int out_dim, const std::string &act)
@@ -218,6 +190,31 @@ class SGD {
  private:
   VariableHandle learning_rate_;
 };
+
+VariableHandle mean(VariableHandle x) {
+  VariableHandle out(new Variable("mean"));
+  get_global_tape().AddOp("mean", {{"X", {x}}}, {{"Out", {out}}}, {});
+  return out;
+}
+
+VariableHandle relu(VariableHandle x) {
+  VariableHandle out(new Variable("relu"));
+  get_global_tape().AddOp("relu", {{"X", {x}}}, {{"Out", {out}}}, {});
+  return out;
+}
+
+VariableHandle softmax(VariableHandle x) {
+  VariableHandle out(new Variable("softmax"));
+  get_global_tape().AddOp("softmax", {{"X", {x}}}, {{"Out", {out}}}, {});
+  return out;
+}
+
+VariableHandle cross_entropy(VariableHandle x, VariableHandle label) {
+  VariableHandle out(new Variable("cross_entropy"));
+  get_global_tape().AddOp(
+      "cross_entropy", {{"X", {x}}, {"Label", {label}}}, {{"Y", {out}}}, {});
+  return out;
+}
 
 VariableHandle CreateRecordioFileReader(std::string filename,
                                         std::vector<int> shape_concat,
