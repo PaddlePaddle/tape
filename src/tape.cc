@@ -58,12 +58,12 @@ std::string to_string(const std::string &type,
   ss << type << " ";
   for (auto &param_name : in_vars) {
     for (auto &var : param_name.second) {
-      ss << param_name.first << ":(" << var->Desc() << ") ";
+      ss << param_name.first << ":(" << var << ") ";
     }
   }
   for (auto &param_name : out_vars) {
     for (auto &var : param_name.second) {
-      ss << param_name.first << ":(" << var->Desc() << ") ";
+      ss << param_name.first << ":(" << var << ") ";
     }
   }
   return ss.str();
@@ -85,41 +85,33 @@ framework::OpDesc CreateOpDesc(const std::string &type,
       outputs[param_name.first].emplace_back(var->Name());
     }
   }
-  return framework::OpDesc(type, inputs, outputs, attrs);
+  framework::OpDesc op_desc(type, inputs, outputs, attrs);
+  op_desc.CheckAttrs();
+  return op_desc;
 }
 
 void InferShapeAndVarType(const std::string &type,
                           const VariableHandleMap &in_vars,
                           VariableHandleMap *out_vars,
                           const framework::AttributeMap &attrs) {
+  // Tape only supports LoDTensor
+  for (auto &param2var : *out_vars) {
+    for (auto &var : param2var.second) {
+      var->GetMutable<framework::LoDTensor>();
+    }
+  }
+
   framework::OpDesc op_desc = CreateOpDesc(type, in_vars, *out_vars, attrs);
-  op_desc.CheckAttrs();
+  ScopeWrapper scope(in_vars, *out_vars);
 
-  // Create a temporary block for compile-time
-  framework::ProgramDesc program_desc;
-  framework::BlockDesc *block_desc = program_desc.MutableBlock(0);
-  PADDLE_ENFORCE(block_desc);
-
-  for (auto &param_name : in_vars) {
-    for (auto &var : param_name.second) {
-      *block_desc->Var(var->Name())->Proto() = *var->MutableDesc()->Proto();
-    }
-  }
-  for (auto &param_name : *out_vars) {
-    for (auto &var : param_name.second) {
-      *block_desc->Var(var->Name())->Proto() = *var->MutableDesc()->Proto();
-    }
-  }
-
-  LOG(INFO) << "- " << to_string(type, in_vars, *out_vars, attrs);
-  op_desc.InferShape(*block_desc);
-  op_desc.InferVarType(block_desc);
-  for (auto &param_name : *out_vars) {
-    for (auto &var : param_name.second) {
-      *var->MutableDesc()->Proto() = *block_desc->Var(var->Name())->Proto();
-    }
-  }
-  LOG(INFO) << "+ " << to_string(type, in_vars, *out_vars, attrs);
+  // Tape only supports OperatorWithKernel
+  auto op = framework::OpRegistry::CreateOp(op_desc);
+  auto *op_with_kernel =
+      dynamic_cast<framework::OperatorWithKernel *>(op.get());
+  PADDLE_ENFORCE_NOT_NULL(op_with_kernel, "%s doesn't have kernel", type);
+  paddle::framework::RuntimeInferShapeContext infer_shape_ctx(*op_with_kernel,
+                                                              scope);
+  op_with_kernel->InferShape(&infer_shape_ctx);
 }
 
 void Tape::AddOp(const std::string &type,
@@ -135,14 +127,6 @@ void Tape::Forward() {
   PADDLE_ENFORCE(!has_been_backwarded_);
   while (current_position_ < tape_.size()) {
     OpHandle &op = tape_[current_position_];
-
-    // Create Output Tensor, this is only necessary for OpWithKernel
-    for (auto &param2var : op.outputs_) {
-      for (auto &var : param2var.second) {
-        var->InitializeVariable();
-      }
-    }
-
     framework::OpDesc op_desc =
         CreateOpDesc(op.type_, op.inputs_, op.outputs_, op.attrs_);
     ScopeWrapper scope(op.inputs_, op.outputs_);
@@ -161,14 +145,9 @@ void Tape::Backward(VariableHandle target) {
   // TODO(tonyyang-svail): check output of last op is target
   backward_tape_.reset(new Tape());
 
-  framework::AttributeMap attrs;
-
   // FIXME(tonyyang-svail): Need to infer_data_type
-  attrs["dtype"] = framework::proto::VarType::Type::VarType_Type_FP32;
-  attrs["shape"] = std::vector<int>{1};
-  attrs["value"] = 1.0f;
   backward_tape_->AddOp(
-      "fill_constant", {}, {{"Out", {target->Grad()}}}, attrs);
+      "fill_ones_like", {{"X", {target}}}, {{"Out", {target->Grad()}}}, {});
 
   for (auto it = tape_.rbegin(); it != tape_.rend(); ++it) {
     framework::OpDesc op_desc =
