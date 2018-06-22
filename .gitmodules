@@ -1,3 +1,4 @@
 [submodule "paddle"]
 	path = paddle
-	url = https://github.com/PaddlePaddle/Paddle
+        url = https://github.com/kexinzhao/Paddle
+        branch = tape_submodule
