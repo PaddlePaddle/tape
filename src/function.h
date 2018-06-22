@@ -40,7 +40,16 @@ class Fill {
       : initializer_(initializer), attrs_(attrs) {}
 
   void operator()(VariableHandle var) {
-    get_global_tape().AddOp(initializer_, {}, {{"Out", {var}}}, attrs_);
+    if (initializer_ == "fill_constant") {
+      // fill_constant is not OperatorWithKernel, so we can't add it to the tape
+      framework::OpDesc op_desc =
+          CreateOpDesc(initializer_, {}, {{"Out", {var}}}, attrs_);
+      ScopeWrapper scope({}, {{"Out", {var}}});
+      framework::OpRegistry::CreateOp(op_desc)->Run(scope,
+                                                    platform::CPUPlace());
+    } else {
+      get_global_tape().AddOp(initializer_, {}, {{"Out", {var}}}, attrs_);
+    }
   }
 
  private:
@@ -54,8 +63,6 @@ class Linear {
       : w_(new Variable("LinearWeight")),
         b_(new Variable("LinearBias")),
         act_(act) {
-    Tape init_tape;
-
     // Use Xavier to initialize Weight
     float limit = sqrt(6.0 / static_cast<float>(in_dim + out_dim));
     framework::AttributeMap attrs;
@@ -64,15 +71,13 @@ class Linear {
     attrs["min"] = -limit;
     attrs["max"] = limit;
     attrs["seed"] = RandomSeed::GetRandomSeed();
-    init_tape.AddOp("uniform_random", {}, {{"Out", {w_}}}, attrs);
+    init_params(w_, "uniform_random", attrs);
 
     // Use fill zero to initialize Bias
     attrs["dtype"] = paddle::framework::proto::VarType::Type::VarType_Type_FP32;
     attrs["shape"] = std::vector<int>{out_dim};
     attrs["value"] = 0.0f;
-    init_tape.AddOp("fill_constant", {}, {{"Out", {b_}}}, attrs);
-
-    init_tape.Forward();
+    init_params(b_, "fill_constant", attrs);
   }
 
   VariableHandle operator()(VariableHandle input) {
@@ -106,8 +111,6 @@ class Convolution2D {
       : w_(new Variable("ConvolutionWeight")),
         b_(new Variable("ConvolutionBias")),
         act_(act) {
-    Tape init_tape;
-
     // Use Xavier to initialize Weight
     float fan_in = c_in * f * f, fan_out = c_out * f * f;
     float limit = sqrt(6.0 / (fan_in + fan_out));
@@ -117,15 +120,13 @@ class Convolution2D {
     attrs["min"] = -limit;
     attrs["max"] = limit;
     attrs["seed"] = RandomSeed::GetRandomSeed();
-    init_tape.AddOp("uniform_random", {}, {{"Out", {w_}}}, attrs);
+    init_params(w_, "uniform_random", attrs);
 
     // Use fill zero to initialize Bias
     attrs["dtype"] = paddle::framework::proto::VarType::Type::VarType_Type_FP32;
     attrs["shape"] = std::vector<int>{c_out};
     attrs["value"] = 0.0f;
-    init_tape.AddOp("fill_constant", {}, {{"Out", {b_}}}, attrs);
-
-    init_tape.Forward();
+    init_params(b_, "fill_constant", attrs);
   }
 
   VariableHandle operator()(VariableHandle input) {
@@ -162,16 +163,12 @@ class Convolution2D {
 class SGD {
  public:
   explicit SGD(float learning_rate) : learning_rate_(new Variable("sgd")) {
-    Tape init_tape;
-
     std::string initializer = "fill_constant";
     framework::AttributeMap attrs;
     attrs["dtype"] = paddle::framework::proto::VarType::Type::VarType_Type_FP32;
     attrs["shape"] = std::vector<int>{1};
     attrs["value"] = learning_rate;
-    init_tape.AddOp(initializer, {}, {{"Out", {learning_rate_}}}, attrs);
-
-    init_tape.Forward();
+    init_params(learning_rate_, initializer, attrs);
   }
 
   void Update(VariableHandle input) {
@@ -190,6 +187,22 @@ class SGD {
  private:
   VariableHandle learning_rate_;
 };
+
+void init_params(VariableHandle v,
+                 const std::string &initializer,
+                 const framework::AttributeMap &attrs) {
+  if (initializer == "fill_constant") {
+    // fill_constant is not OperatorWithKernel, so we can't add it to the tape
+    framework::OpDesc op_desc =
+        CreateOpDesc(initializer, {}, {{"Out", {v}}}, attrs);
+    ScopeWrapper scope({}, {{"Out", {v}}});
+    framework::OpRegistry::CreateOp(op_desc)->Run(scope, platform::CPUPlace());
+  } else {
+    Tape init_tape;
+    init_tape.AddOp(initializer, {}, {{"Out", {v}}}, attrs);
+    init_tape.Forward();
+  }
+}
 
 VariableHandle mean(VariableHandle x) {
   VariableHandle out(new Variable("mean"));
@@ -221,7 +234,6 @@ VariableHandle CreateRecordioFileReader(std::string filename,
                                         std::vector<int> ranks,
                                         std::vector<int> lod_levels) {
   VariableHandle reader(new paddle::tape::Variable("reader"));
-  reader->MutableDesc()->SetType(paddle::framework::proto::VarType::READER);
 
   framework::OpDesc op_desc = CreateOpDesc("create_recordio_file_reader",
                                            {},
@@ -237,10 +249,7 @@ VariableHandle CreateRecordioFileReader(std::string filename,
 }
 
 void ReadNext(VariableHandle reader, VariableHandle data_holder) {
-  PADDLE_ENFORCE_EQ(reader->Desc().GetType(),
-                    paddle::framework::proto::VarType::READER);
-  PADDLE_ENFORCE_EQ(data_holder->Desc().GetType(),
-                    paddle::framework::proto::VarType::LOD_TENSOR_ARRAY);
+  PADDLE_ENFORCE(reader->Var().IsType<framework::ReaderHolder>());
 
   reader->GetMutable<paddle::framework::ReaderHolder>()->ReadNext(
       data_holder->GetMutable<paddle::framework::LoDTensorArray>());

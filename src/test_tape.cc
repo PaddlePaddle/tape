@@ -31,44 +31,10 @@ using paddle::tape::ReadNext;
 
 TEST(Tape, TestReader) {
   VariableHandle data_label(new paddle::tape::Variable("data_label"));
-  data_label->MutableDesc()->SetType(
-      paddle::framework::proto::VarType::LOD_TENSOR_ARRAY);
-
   VariableHandle reader = CreateRecordioFileReader(
       "/tape/src/data/mnist.recordio", {32, 1, 28, 28, 32, 1}, {4, 2}, {0, 0});
-
   ReadNext(reader, data_label);
   LOG(INFO) << *data_label;
-}
-
-TEST(Tape, TestSoftmax) {
-  std::string data_initializer = "uniform_random";
-  paddle::framework::AttributeMap data_attrs;
-  data_attrs["min"] = -1.0f;
-  data_attrs["max"] = 1.0f;
-  data_attrs["dtype"] =
-      paddle::framework::proto::VarType::Type::VarType_Type_FP32;
-  data_attrs["shape"] = std::vector<int>{10, 10};
-  data_attrs["seed"] = 123;
-  Fill data_filler(data_initializer, data_attrs);
-
-  std::string label_initializer = "fill_constant";
-  paddle::framework::AttributeMap label_attrs;
-  label_attrs["dtype"] =
-      paddle::framework::proto::VarType::Type::VarType_Type_INT64;
-  label_attrs["shape"] = std::vector<int>{10, 1};
-  label_attrs["value"] = 1.0f;
-  Fill label_filler(label_initializer, label_attrs);
-
-  VariableHandle input(new Variable("input"));
-  data_filler(input);
-  VariableHandle label(new Variable("input"));
-  label_filler(label);
-
-  auto loss = cross_entropy(softmax(input), label);
-
-  LOG(INFO) << input->Value();
-  LOG(INFO) << loss->Value();
 }
 
 TEST(Tape, TestRelu) {

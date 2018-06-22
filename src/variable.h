@@ -36,20 +36,17 @@ std::ostream& operator<<(std::ostream&, const Variable&);
 class Variable {
  public:
   explicit Variable(const std::string pre_fix)
-      : desc_(pre_fix + std::to_string(count())) {}
+      : name_(pre_fix + std::to_string(count())) {}
 
   Variable(const std::string pre_fix, bool is_grad)
-      : desc_(pre_fix + (is_grad ? framework::kGradVarSuffix
+      : name_(pre_fix + (is_grad ? framework::kGradVarSuffix
                                  : std::to_string(count()))) {}
 
   ~Variable() { LOG(INFO) << "Deleting " << Name(); }
 
-  // Instantiate LoDTensor/SelectedRow
-  void InitializeVariable();
-
   VariableHandle Grad() {
     if (grad_.expired()) {
-      VariableHandle new_grad(new Variable(desc_.Name(), true));
+      VariableHandle new_grad(new Variable(name_, true));
       grad_ = new_grad;
       return new_grad;
     } else {
@@ -66,11 +63,8 @@ class Variable {
   // Evaluate a variable by running Forward() on the global tape
   const Variable& Value();
 
-  const framework::VarDesc& Desc() const { return desc_; }
-  framework::VarDesc* MutableDesc() { return &desc_; }
-
   // TODO(tonyyang-svail): No need to expose name
-  std::string Name() const { return desc_.Name(); }
+  std::string Name() const { return name_; }
 
   const framework::Variable& Var() const { return var_; }
   framework::Variable* MutableVar() { return &var_; }
@@ -91,7 +85,7 @@ class Variable {
     return counter++;
   }
 
-  framework::VarDesc desc_;
+  std::string name_;
   framework::Variable var_;
 
   // Not own
