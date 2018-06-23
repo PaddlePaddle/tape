@@ -206,7 +206,7 @@ VariableHandle pool2d(VariableHandle x) {
   get_global_tape().AddOp("pool2d",
                           {{"X", {x}}},
                           {{"Out", {out}}},
-                          {{"pooling_type", "max"},
+                          {{"pooling_type", std::string("max")},
                            {"ksize", std::vector<int>{2, 2}},
                            {"global_pooling", false},
                            {"strides", std::vector<int>{1, 1}},
@@ -214,9 +214,11 @@ VariableHandle pool2d(VariableHandle x) {
                            {"use_cudnn", false},
                            {"ceil_mode", false},
                            {"use_mkldnn", false},
-                           {"data_format", "AnyLayout"}});
+                           {"data_format", std::string("AnyLayout")}});
   return out;
 }
+
+VariableHandle batchnorm(VariableHandle x) { VariableHandle }
 
 VariableHandle dropout(VariableHandle x) {
   VariableHandle out(new Variable("dropout"));

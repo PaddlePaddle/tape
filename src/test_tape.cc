@@ -50,6 +50,26 @@ TEST(Tape, TestDropout) {
   LOG(INFO) << input->Grad()->Value();
 }
 
+TEST(Tape, TestPool2d) {
+  std::string initializer = "uniform_random";
+  paddle::framework::AttributeMap attrs;
+  attrs["min"] = -1.0f;
+  attrs["max"] = 1.0f;
+  attrs["dtype"] = paddle::framework::proto::VarType::Type::VarType_Type_FP32;
+  attrs["seed"] = 123;
+  attrs["shape"] = std::vector<int>{1, 1, 3, 3};
+  Fill filler(initializer, attrs);
+
+  VariableHandle input(new Variable("input"));
+  filler(input);
+  auto loss = pool2d(input);
+  LOG(INFO) << input->Value();
+  LOG(INFO) << loss->Value();
+
+  get_global_tape().Backward(loss);
+  LOG(INFO) << input->Grad()->Value();
+}
+
 TEST(Tape, TestConv) {
   Convolution2D conv1(3, 16, 3, "relu");
   Convolution2D conv2(16, 1, 3, "relu");
