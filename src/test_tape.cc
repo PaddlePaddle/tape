@@ -30,20 +30,14 @@ using paddle::tape::get_global_tape;
 using paddle::tape::CreateRecordioFileReader;
 using paddle::tape::ReadNext;
 
-TEST(Tape, TestReader) {
-  VariableHandle data_label(new paddle::tape::Variable("data_label"));
-  VariableHandle reader = CreateRecordioFileReader(
-      "/tape/src/data/mnist.recordio", {32, 1, 28, 28, 32, 1}, {4, 2}, {0, 0});
-  ReadNext(reader, data_label);
-  LOG(INFO) << *data_label;
-}
-
 TEST(Tape, TestDropout) {
-  std::string initializer = "fill_constant";
+  std::string initializer = "uniform_random";
   paddle::framework::AttributeMap attrs;
+  attrs["min"] = -1.0f;
+  attrs["max"] = 1.0f;
   attrs["dtype"] = paddle::framework::proto::VarType::Type::VarType_Type_FP32;
+  attrs["seed"] = 123;
   attrs["shape"] = std::vector<int>{3, 3};
-  attrs["value"] = 1.0f;
   Fill filler(initializer, attrs);
 
   VariableHandle input(new Variable("input"));
@@ -56,34 +50,19 @@ TEST(Tape, TestDropout) {
   LOG(INFO) << input->Grad()->Value();
 }
 
-TEST(Tape, TestRelu) {
-  std::string initializer = "uniform_random";
-  paddle::framework::AttributeMap attrs;
-  attrs["min"] = -1.0f;
-  attrs["max"] = 1.0f;
-  attrs["dtype"] = paddle::framework::proto::VarType::Type::VarType_Type_FP32;
-  attrs["shape"] = std::vector<int>{10};
-  attrs["seed"] = 123;
-  Fill filler(initializer, attrs);
-
-  VariableHandle input(new Variable("input"));
-  filler(input);
-  auto loss = relu(input);
-  LOG(INFO) << input->Value();
-  LOG(INFO) << loss->Value();
-}
-
 TEST(Tape, TestConv) {
   Convolution2D conv1(3, 16, 3, "relu");
   Convolution2D conv2(16, 1, 3, "relu");
 
   SGD sgd(0.001);
 
-  std::string initializer = "fill_constant";
+  std::string initializer = "uniform_random";
   paddle::framework::AttributeMap attrs;
+  attrs["min"] = -1.0f;
+  attrs["max"] = 1.0f;
   attrs["dtype"] = paddle::framework::proto::VarType::Type::VarType_Type_FP32;
+  attrs["seed"] = 123;
   attrs["shape"] = std::vector<int>{32, 3, 8, 8};
-  attrs["value"] = 1.0f;
   Fill filler(initializer, attrs);
 
   for (int i = 0; i < 2; ++i) {
@@ -111,11 +90,13 @@ TEST(Tape, TestMLP) {
 
   SGD sgd(0.001);
 
-  std::string initializer = "fill_constant";
+  std::string initializer = "uniform_random";
   paddle::framework::AttributeMap attrs;
+  attrs["min"] = -1.0f;
+  attrs["max"] = 1.0f;
   attrs["dtype"] = paddle::framework::proto::VarType::Type::VarType_Type_FP32;
+  attrs["seed"] = 123;
   attrs["shape"] = std::vector<int>{3, 3};
-  attrs["value"] = 1.0f;
   Fill filler(initializer, attrs);
 
   for (int i = 0; i < 2; ++i) {
@@ -138,7 +119,7 @@ TEST(Tape, TestMLP) {
   }
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
   std::vector<paddle::platform::Place> places;
   places.emplace_back(paddle::platform::CPUPlace());
   paddle::platform::DeviceContextPool::Init(places);

@@ -30,7 +30,7 @@ def create_mnist_recordio_files():
             ],
             place=fluid.CPUPlace())
         fluid.recordio_writer.convert_reader_to_recordio_file(
-            '/tape/src/data/mnist.recordio', reader, feeder)
+            '/tmp/mnist.recordio', reader, feeder)
 
 
 if __name__ == "__main__":

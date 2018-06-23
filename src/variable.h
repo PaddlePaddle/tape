@@ -42,7 +42,7 @@ class Variable {
       : name_(pre_fix + (is_grad ? framework::kGradVarSuffix
                                  : std::to_string(count()))) {}
 
-  ~Variable() { LOG(INFO) << "Deleting " << Name(); }
+  ~Variable() { VLOG(10) << "Deleting " << Name(); }
 
   VariableHandle Grad() {
     if (grad_.expired()) {
