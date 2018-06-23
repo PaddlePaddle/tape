@@ -204,6 +204,23 @@ class SGD {
   VariableHandle learning_rate_;
 };
 
+VariableHandle pool2d(VariableHandle x) {
+  VariableHandle out(new Variable("pool2d"));
+  get_global_tape().AddOp("pool2d",
+                          {{"X", {x}}},
+                          {{"Out", {out}}},
+                          {{"pooling_type", "max"},
+                           {"ksize", std::vector<int>{2, 2}},
+                           {"global_pooling", false},
+                           {"strides", std::vector<int>{1, 1}},
+                           {"paddings", std::vector<int>{0, 0}},
+                           {"use_cudnn", false},
+                           {"ceil_mode", false},
+                           {"use_mkldnn", false},
+                           {"data_format", "AnyLayout"}});
+  return out;
+}
+
 VariableHandle dropout(VariableHandle x) {
   VariableHandle out(new Variable("dropout"));
   VariableHandle mask(new Variable("mask"));

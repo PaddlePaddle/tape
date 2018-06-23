@@ -118,14 +118,15 @@ void Tape::AddOp(const std::string &type,
                  const VariableHandleMap &in_vars,
                  VariableHandleMap out_vars,
                  const framework::AttributeMap &attrs) {
+  PADDLE_ENFORCE(!has_been_backwarded_);
   InferShapeAndVarType(type, in_vars, &out_vars, attrs);
   tape_.emplace_back(type, in_vars, out_vars, attrs);
 }
 
 void Tape::Forward() {
   LOG(INFO) << "Starting forward -------------------------";
-  PADDLE_ENFORCE(!has_been_backwarded_);
   while (current_position_ < tape_.size()) {
+    PADDLE_ENFORCE(!has_been_backwarded_);
     OpHandle &op = tape_[current_position_];
     framework::OpDesc op_desc =
         CreateOpDesc(op.type_, op.inputs_, op.outputs_, op.attrs_);

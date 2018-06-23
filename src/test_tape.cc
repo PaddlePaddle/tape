@@ -21,6 +21,7 @@ using paddle::tape::Linear;
 using paddle::tape::Convolution2D;
 using paddle::tape::SGD;
 using paddle::tape::Fill;
+using paddle::tape::dropout;
 using paddle::tape::mean;
 using paddle::tape::softmax;
 using paddle::tape::cross_entropy;
@@ -52,6 +53,7 @@ TEST(Tape, TestDropout) {
   LOG(INFO) << loss->Value();
 
   get_global_tape().Backward(loss);
+  LOG(INFO) << input->Grad()->Value();
 }
 
 TEST(Tape, TestRelu) {
