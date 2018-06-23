@@ -41,12 +41,9 @@ class Fill {
 
   void operator()(VariableHandle var) {
     if (initializer_ == "fill_constant") {
-      // fill_constant is not OperatorWithKernel, so we can't add it to the tape
-      framework::OpDesc op_desc =
-          CreateOpDesc(initializer_, {}, {{"Out", {var}}}, attrs_);
-      ScopeWrapper scope({}, {{"Out", {var}}});
-      framework::OpRegistry::CreateOp(op_desc)->Run(scope,
-                                                    platform::CPUPlace());
+      PADDLE_THROW(
+          "fill_constant is not supported, since it is not of type "
+          "OperatorWithKernel");
     } else {
       get_global_tape().AddOp(initializer_, {}, {{"Out", {var}}}, attrs_);
     }
@@ -73,16 +70,11 @@ void init_params(VariableHandle v,
   }
 }
 
-// TODO(tonyyang-svail): change this to a function
-// https://github.com/PaddlePaddle/tape/issues/23
-class Mean {
- public:
-  VariableHandle operator()(VariableHandle var) {
-    VariableHandle out(new Variable("mean"));
-    get_global_tape().AddOp("mean", {{"X", {var}}}, {{"Out", {out}}}, {});
-    return out;
-  }
-};
+VariableHandle mean(VariableHandle x) {
+  VariableHandle out(new Variable("mean"));
+  get_global_tape().AddOp("mean", {{"X", {x}}}, {{"Out", {out}}}, {});
+  return out;
+}
 
 VariableHandle relu(VariableHandle x) {
   VariableHandle out(new Variable("relu"));
@@ -253,11 +245,27 @@ VariableHandle CreateRecordioFileReader(std::string filename,
   return reader;
 }
 
-void ReadNext(VariableHandle reader, VariableHandle data_holder) {
+std::vector<VariableHandle> ReadNext(VariableHandle reader) {
   PADDLE_ENFORCE(reader->Var().IsType<framework::ReaderHolder>());
 
-  reader->GetMutable<paddle::framework::ReaderHolder>()->ReadNext(
-      data_holder->GetMutable<paddle::framework::LoDTensorArray>());
+  paddle::framework::LoDTensorArray data_holder;
+  reader->GetMutable<paddle::framework::ReaderHolder>()->ReadNext(&data_holder);
+  if (data_holder.empty()) {
+    reader->GetMutable<paddle::framework::ReaderHolder>()->ReInit();
+    reader->GetMutable<paddle::framework::ReaderHolder>()->ReadNext(
+        &data_holder);
+  }
+  PADDLE_ENFORCE(!data_holder.empty(), "Error reading file.");
+
+  std::vector<VariableHandle> rval;
+  for (size_t i = 0; i < data_holder.size(); ++i) {
+    rval.emplace_back(new Variable("data" + std::to_string(i)));
+    auto *lod_tensor = rval.back()->GetMutable<framework::LoDTensor>();
+    lod_tensor->ShareDataWith(data_holder[i]);
+    lod_tensor->set_lod(data_holder[i].lod());
+  }
+
+  return rval;
 }
 
 }  // namespace tape

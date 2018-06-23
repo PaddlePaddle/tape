@@ -123,7 +123,7 @@ void Tape::AddOp(const std::string &type,
 }
 
 void Tape::Forward() {
-  LOG(INFO) << "Starting forward -------------------------";
+  VLOG(3) << "Starting forward -------------------------";
   PADDLE_ENFORCE(!has_been_backwarded_);
   while (current_position_ < tape_.size()) {
     OpHandle &op = tape_[current_position_];
@@ -134,7 +134,7 @@ void Tape::Forward() {
     current_position_++;
   }
 
-  LOG(INFO) << "Finishing forward -------------------------";
+  VLOG(3) << "Finishing forward -------------------------";
 }
 
 void Tape::Backward(VariableHandle target) {
