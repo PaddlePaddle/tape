@@ -99,7 +99,7 @@ VariableHandle cross_entropy(VariableHandle x, VariableHandle label) {
 
 VariableHandle concat(std::vector<VariableHandle> x) {
   VariableHandle out(new Variable("concat"));
-  get_global_tape().AddOp("concat", {{"X", x}}, {{"Y", {out}}}, {});
+  get_global_tape().AddOp("concat", {{"X", x}}, {{"Out", {out}}}, {});
   return out;
 }
 

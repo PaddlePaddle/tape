@@ -38,7 +38,7 @@ VariableHandle fill_constant(std::vector<int> dims, float value) {
   VariableHandle out(new Variable("out"));
 
   paddle::framework::AttributeMap attrs;
-  attrs["dtype"] = paddle::framework::proto::VarType::Type::VarType_Type_FP32;
+  attrs["dtype"] = paddle::framework::proto::VarType::Type::VarType_Type_INT64;
   attrs["shape"] = dims;
   attrs["value"] = value;
   paddle::framework::OpDesc op_desc =
@@ -51,10 +51,11 @@ VariableHandle fill_constant(std::vector<int> dims, float value) {
 }
 
 VariableHandle get_real_fake_labels(int batch_size) {
-  auto real_label = fill_constant({batch_size}, 1.0);
-  auto fake_label = fill_constant({batch_size}, 0.0);
+  auto real_label = fill_constant({batch_size, 1}, 1.0);
+  auto fake_label = fill_constant({batch_size, 1}, 0.0);
 
   VariableHandle out(new Variable("out"));
+  out->GetMutable<paddle::framework::LoDTensor>();
   paddle::framework::OpDesc op_desc = paddle::tape::CreateOpDesc(
       "concat", {{"X", {real_label, fake_label}}}, {{"Out", {out}}}, {});
   paddle::tape::ScopeWrapper scope({{"X", {real_label, fake_label}}},
@@ -74,12 +75,12 @@ TEST(FCGAN, TestCPU) {
   std::string filename = "/tmp/mnist.recordio";
   PADDLE_ENFORCE(is_file_exist(filename),
                  "file doesn't exist; have you run create_mnist_recordio.py");
-  auto reader = CreateRecordioFileReader(
-      filename, {32, 1, 28, 28, 32, 1}, {4, 2}, {0, 0});
+  auto reader =
+      CreateRecordioFileReader(filename, {32, 784, 32, 1}, {2, 2}, {0, 0});
 
   // Discriminator
   Linear d_linear1(784, 200, "relu");
-  Linear d_linear2(200, 1, "relu");
+  Linear d_linear2(200, 2, "relu");
 
   // Generator
   Linear g_linear1(100, 200, "relu");
@@ -99,25 +100,54 @@ TEST(FCGAN, TestCPU) {
   for (int i = 0; i < 10; ++i) {
     // train Discriminator
     {
+      reset_global_tape();
+
       // generate fake image
       auto noise = noise_generator();
       auto fake_image = g_linear2(g_linear1(noise));
-      LOG(INFO) << fake_image->Value();
-
-      reset_global_tape();
 
       auto data_label = ReadNext(reader);
       auto real_image = data_label[0];
 
-      auto image = paddle::tape::concat(real_image, fake_image);
+      auto image = concat({real_image, fake_image});
+      auto label = get_real_fake_labels(32);  // [1, ..., 1, 0, ..., 0]
+
       auto loss = cross_entropy(softmax(d_linear2(d_linear1(image))), label);
       auto mean_loss = mean(loss);
+      LOG(INFO) << "D " << mean_loss->Value();
 
       get_global_tape().Backward(mean_loss);
+
+      for (auto w : d_linear1.Params()) {
+        sgd.Update(w);
+      }
+      for (auto w : d_linear2.Params()) {
+        sgd.Update(w);
+      }
     }
 
+    // train Generator
     {
-      // train Generator
+      reset_global_tape();
+
+      // generate fake image
+      auto noise = noise_generator();
+      auto label = fill_constant({32, 1}, 1);
+      auto fake_image = g_linear2(g_linear1(noise));
+
+      auto loss =
+          cross_entropy(softmax(d_linear2(d_linear1(fake_image))), label);
+      auto mean_loss = mean(loss);
+      LOG(INFO) << "G " << mean_loss->Value();
+
+      get_global_tape().Backward(mean_loss);
+
+      for (auto w : g_linear1.Params()) {
+        sgd.Update(w);
+      }
+      for (auto w : g_linear2.Params()) {
+        sgd.Update(w);
+      }
     }
   }
 }
