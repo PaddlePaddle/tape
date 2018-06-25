@@ -39,14 +39,16 @@ class Fill {
   Fill(const std::string &initializer, const framework::AttributeMap &attrs)
       : initializer_(initializer), attrs_(attrs) {}
 
-  void operator()(VariableHandle var) {
+  VariableHandle operator()() {
     if (initializer_ == "fill_constant") {
       PADDLE_THROW(
           "fill_constant is not supported, since it is not of type "
           "OperatorWithKernel");
-    } else {
-      get_global_tape().AddOp(initializer_, {}, {{"Out", {var}}}, attrs_);
     }
+
+    VariableHandle var(new Variable(initializer_));
+    get_global_tape().AddOp(initializer_, {}, {{"Out", {var}}}, attrs_);
+    return var;
   }
 
  private:
