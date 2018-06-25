@@ -122,10 +122,8 @@ class Linear {
 
   VariableHandle operator()(VariableHandle input) {
     VariableHandle pre_bias(new Variable("linear"));
-    get_global_tape().AddOp("mul",
-                            {{"X", {input}}, {"Y", {w_}}},
-                            {{"Out", {pre_bias}}},
-                            {{"x_num_col_dims", 1}, {"y_num_col_dims", 1}});
+    get_global_tape().AddOp(
+        "mul", {{"X", {input}}, {"Y", {w_}}}, {{"Out", {pre_bias}}}, {});
     VariableHandle pre_act(new Variable("linear"));
     get_global_tape().AddOp("elementwise_add",
                             {{"X", {pre_bias}}, {"Y", {b_}}},
@@ -174,13 +172,7 @@ class Convolution2D {
     get_global_tape().AddOp("conv2d",
                             {{"Input", {input}}, {"Filter", {w_}}},
                             {{"Output", {pre_bias}}},
-                            {{"strides", std::vector<int>{1, 1}},
-                             {"paddings", std::vector<int>{0, 0}},
-                             {"dilations", std::vector<int>{1, 1}},
-                             {"groups", 1},
-                             {"use_cudnn", false},
-                             {"use_mkldnn", false},
-                             {"data_format", std::string("AnyLayout")}});
+                            {});
     VariableHandle pre_act(new Variable("conv"));
     get_global_tape().AddOp("elementwise_add",
                             {{"X", {pre_bias}}, {"Y", {b_}}},
