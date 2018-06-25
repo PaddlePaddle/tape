@@ -201,6 +201,62 @@ class SGD {
   VariableHandle learning_rate_;
 };
 
+class BatchNorm {
+ public:
+  BatchNorm(int c_in, std::string act)
+      : scale_(new Variable("BatchNormScale")),
+        bias_(new Variable("BatchNormBias")),
+        mean_(new Variable("BatchNormMean")),
+        variance_(new Variable("BatchNormVariance")),
+        act_(act) {
+    // Use fill one to initialize scale and variance
+    framework::AttributeMap attrs;
+    attrs["dtype"] = paddle::framework::proto::VarType::Type::VarType_Type_FP32;
+    attrs["shape"] = std::vector<int>{c_in};
+    attrs["value"] = 1.0f;
+    init_params(scale_, "fill_constant", attrs);
+    init_params(variance_, "fill_constant", attrs);
+
+    // Use fill zero to initialize bias and mean
+    attrs["value"] = 0.0f;
+    init_params(bias_, "fill_constant", attrs);
+    init_params(mean_, "fill_constant", attrs);
+  }
+
+  VariableHandle operator()(VariableHandle x) {
+    VariableHandle pre_act(new Variable("batch_norm"));
+    VariableHandle tmp_mean(new Variable("tmp_mean"));
+    VariableHandle tmp_var(new Variable("tmp_var"));
+    get_global_tape().AddOp("batch_norm",
+                            {{"X", {x}},
+                             {"Scale", {scale_}},
+                             {"Bias", {bias_}},
+                             {"Mean", {mean_}},
+                             {"Variance", {variance_}}},
+                            {{"Y", {pre_act}},
+                             {"MeanOut", {mean_}},
+                             {"VarianceOut", {variance_}},
+                             {"SavedMean", {tmp_mean}},
+                             {"SavedVariance", {tmp_var}}},
+                            {});
+
+    VariableHandle post_act(new Variable("batch_norm"));
+    get_global_tape().AddOp(
+        act_, {{"X", {pre_act}}}, {{"Out", {post_act}}}, {});
+    return post_act;
+  }
+
+  // Only scale and bias need to be updated by SGD
+  std::vector<VariableHandle> Params() { return {scale_, bias_}; }
+
+ private:
+  VariableHandle scale_;
+  VariableHandle bias_;
+  VariableHandle mean_;
+  VariableHandle variance_;
+  std::string act_;
+};
+
 VariableHandle pool2d(VariableHandle x) {
   VariableHandle out(new Variable("pool2d"));
   get_global_tape().AddOp("pool2d",
@@ -211,14 +267,10 @@ VariableHandle pool2d(VariableHandle x) {
                            {"global_pooling", false},
                            {"strides", std::vector<int>{1, 1}},
                            {"paddings", std::vector<int>{0, 0}},
-                           {"use_cudnn", false},
                            {"ceil_mode", false},
-                           {"use_mkldnn", false},
                            {"data_format", std::string("AnyLayout")}});
   return out;
 }
-
-VariableHandle batchnorm(VariableHandle x) { VariableHandle }
 
 VariableHandle dropout(VariableHandle x) {
   VariableHandle out(new Variable("dropout"));

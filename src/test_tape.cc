@@ -21,6 +21,7 @@ using paddle::tape::Linear;
 using paddle::tape::Convolution2D;
 using paddle::tape::SGD;
 using paddle::tape::Fill;
+using paddle::tape::BatchNorm;
 using paddle::tape::dropout;
 using paddle::tape::mean;
 using paddle::tape::softmax;
@@ -40,6 +41,7 @@ TEST(Tape, TestDropout) {
   attrs["shape"] = std::vector<int>{3, 3};
   Fill filler(initializer, attrs);
 
+  reset_global_tape();
   VariableHandle input(new Variable("input"));
   filler(input);
   auto loss = dropout(input);
@@ -60,6 +62,7 @@ TEST(Tape, TestPool2d) {
   attrs["shape"] = std::vector<int>{1, 1, 3, 3};
   Fill filler(initializer, attrs);
 
+  reset_global_tape();
   VariableHandle input(new Variable("input"));
   filler(input);
   auto loss = pool2d(input);
@@ -68,6 +71,35 @@ TEST(Tape, TestPool2d) {
 
   get_global_tape().Backward(loss);
   LOG(INFO) << input->Grad()->Value();
+}
+
+TEST(Tape, TestBatchNorm) {
+  BatchNorm bn(4, "relu");
+  SGD sgd(0.001);
+
+  std::string initializer = "uniform_random";
+  paddle::framework::AttributeMap attrs;
+  attrs["min"] = -1.0f;
+  attrs["max"] = 1.0f;
+  attrs["dtype"] = paddle::framework::proto::VarType::Type::VarType_Type_FP32;
+  attrs["seed"] = 123;
+  attrs["shape"] = std::vector<int>{32, 4, 8, 8};
+  Fill filler(initializer, attrs);
+
+  for (int i = 0; i < 2; ++i) {
+    reset_global_tape();
+
+    VariableHandle input(new Variable("input"));
+    filler(input);
+
+    auto loss = bn(input);
+
+    get_global_tape().Backward(loss);
+
+    for (auto w : bn.Params()) {
+      sgd.Update(w);
+    }
+  }
 }
 
 TEST(Tape, TestConv) {
