@@ -95,6 +95,12 @@ VariableHandle cross_entropy(VariableHandle x, VariableHandle label) {
   return out;
 }
 
+VariableHandle concat(std::vector<VariableHandle> x) {
+  VariableHandle out(new Variable("concat"));
+  get_global_tape().AddOp("concat", {{"X", x}}, {{"Y", {out}}}, {});
+  return out;
+}
+
 class Linear {
  public:
   Linear(int in_dim, int out_dim, const std::string &act)

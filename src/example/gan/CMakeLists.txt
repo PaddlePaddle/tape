@@ -13,5 +13,6 @@
 # limitations under the License.
 #
 
-add_subdirectory(mnist)
-add_subdirectory(gan)
+cc_test(test_gan
+        SRCS test_gan.cc
+        DEPS tape tape_variable tape_function)
