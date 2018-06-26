@@ -56,10 +56,11 @@ TEST(Mnist, TestCPU) {
 
     auto predict = softmax(linear3(linear2(linear1(data))));
     auto loss = mean(cross_entropy(predict, label));
-    if (i % print_step == 0) {
-      avg_loss +=
-          loss->Value().Get<paddle::framework::LoDTensor>().data<float>()[0];
-      LOG(INFO) << avg_loss;
+
+    avg_loss +=
+        loss->Value().Get<paddle::framework::LoDTensor>().data<float>()[0];
+    if ((i + 1) % print_step == 0) {
+      LOG(INFO) << avg_loss / print_step;
       avg_loss = 0;
     }
 
