@@ -16,8 +16,10 @@
 
 #include <cmath>
 #include <string>
+#include <tuple>
 #include <vector>
 
+#include "paddle/fluid/framework/ddim.h"
 #include "paddle/fluid/framework/op_registry.h"
 #include "paddle/fluid/framework/reader.h"
 #include "paddle/fluid/framework/type_defs.h"
@@ -198,6 +200,83 @@ class SGD {
 
  private:
   VariableHandle learning_rate_;
+};
+
+class Adam {
+ public:
+  explicit Adam(float learning_rate, float beta1 = 0.9f, float beta2 = 0.999f)
+      : learning_rate_(new Variable("adam")), beta1_(beta1), beta2_(beta2) {
+    std::string initializer = "fill_constant";
+    framework::AttributeMap attrs;
+    attrs["dtype"] = paddle::framework::proto::VarType::Type::VarType_Type_FP32;
+    attrs["shape"] = std::vector<int>{1};
+    attrs["value"] = learning_rate;
+    init_params(learning_rate_, initializer, attrs);
+  }
+
+  void Update(VariableHandle input) {
+    PADDLE_ENFORCE(get_global_tape().HasBeenBackwarded(),
+                   "optimization must happen after the backward");
+    // initialize to 0 if the moments of this input haven't been created
+    if (states.find(input->Name()) == states.end()) {
+      framework::AttributeMap attrs;
+      attrs["dtype"] =
+          paddle::framework::proto::VarType::Type::VarType_Type_FP32;
+      attrs["shape"] = paddle::framework::vectorize2int(
+          input->Get<paddle::framework::LoDTensor>().dims());
+      attrs["value"] = 0.0f;
+      VariableHandle moment1(new Variable("adam"));
+      VariableHandle moment2(new Variable("adam"));
+      init_params(moment1, "fill_constant", attrs);
+      init_params(moment2, "fill_constant", attrs);
+
+      attrs["shape"] = std::vector<int>{1};
+      attrs["value"] = 1.0f;
+      VariableHandle beta1_pow(new Variable("adam"));
+      VariableHandle beta2_pow(new Variable("adam"));
+      init_params(beta1_pow, "fill_constant", attrs);
+      init_params(beta2_pow, "fill_constant", attrs);
+      states[input->Name()] =
+          std::make_tuple(moment1, moment2, beta1_pow, beta2_pow);
+    }
+
+    auto moment1 = std::get<0>(states[input->Name()]);
+    auto moment2 = std::get<1>(states[input->Name()]);
+    auto beta1_pow = std::get<2>(states[input->Name()]);
+    auto beta2_pow = std::get<3>(states[input->Name()]);
+
+    beta1_pow->GetMutable<paddle::framework::LoDTensor>()->data<float>()[0] *=
+        beta1_;
+    beta2_pow->GetMutable<paddle::framework::LoDTensor>()->data<float>()[0] *=
+        beta2_;
+
+    Tape temp_tape;
+    temp_tape.AddOp("adam",
+                    {{"Param", {input}},
+                     {"LearningRate", {learning_rate_}},
+                     {"Grad", {input->Grad()}},
+                     {"Moment1", {moment1}},
+                     {"Moment2", {moment2}},
+                     {"Beta1Pow", {beta1_pow}},
+                     {"Beta2Pow", {beta2_pow}}},
+                    {{"ParamOut", {input}},
+                     {"Moment1Out", {moment1}},
+                     {"Moment2Out", {moment2}}},
+                    {{"beta1", beta1_}, {"beta2", beta2_}});
+    temp_tape.Forward();
+  }
+
+ private:
+  VariableHandle learning_rate_;
+  float beta1_;
+  float beta2_;
+  // store the following items in order: first moment, second moment, beta1_pow,
+  // beta2_pow
+  std::unordered_map<
+      std::string,
+      std::
+          tuple<VariableHandle, VariableHandle, VariableHandle, VariableHandle>>
+      states;
 };
 
 class BatchNorm {

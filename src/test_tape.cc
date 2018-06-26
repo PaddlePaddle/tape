@@ -20,6 +20,7 @@ using paddle::tape::Variable;
 using paddle::tape::Linear;
 using paddle::tape::Convolution2D;
 using paddle::tape::SGD;
+using paddle::tape::Adam;
 using paddle::tape::Fill;
 using paddle::tape::BatchNorm;
 using paddle::tape::dropout;
@@ -75,7 +76,7 @@ TEST(Tape, TestPool2d) {
 
 TEST(Tape, TestBatchNorm) {
   BatchNorm bn(4, "relu");
-  SGD sgd(0.001);
+  Adam adam(0.001);
 
   std::string initializer = "uniform_random";
   paddle::framework::AttributeMap attrs;
@@ -86,7 +87,7 @@ TEST(Tape, TestBatchNorm) {
   attrs["shape"] = std::vector<int>{32, 4, 8, 8};
   Fill filler(initializer, attrs);
 
-  for (int i = 0; i < 2; ++i) {
+  for (int i = 0; i < 5; ++i) {
     reset_global_tape();
 
     VariableHandle input(new Variable("input"));
@@ -95,9 +96,10 @@ TEST(Tape, TestBatchNorm) {
     auto loss = bn(input);
 
     get_global_tape().Backward(loss);
+    LOG(INFO) << loss->Value();
 
     for (auto w : bn.Params()) {
-      sgd.Update(w);
+      adam.Update(w);
     }
   }
 }
@@ -106,7 +108,7 @@ TEST(Tape, TestConv) {
   Convolution2D conv1(3, 16, 3, "relu");
   Convolution2D conv2(16, 1, 3, "relu");
 
-  SGD sgd(0.001);
+  Adam adam(0.001);
 
   std::string initializer = "uniform_random";
   paddle::framework::AttributeMap attrs;
@@ -128,10 +130,10 @@ TEST(Tape, TestConv) {
     get_global_tape().Backward(loss);
 
     for (auto w : conv1.Params()) {
-      sgd.Update(w);
+      adam.Update(w);
     }
     for (auto w : conv2.Params()) {
-      sgd.Update(w);
+      adam.Update(w);
     }
   }
 }
