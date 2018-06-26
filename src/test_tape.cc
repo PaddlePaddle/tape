@@ -120,8 +120,7 @@ TEST(Tape, TestConv) {
   for (int i = 0; i < 2; ++i) {
     reset_global_tape();
 
-    VariableHandle input(new Variable("input"));
-    filler(input);
+    auto input = filler();
 
     auto loss = mean(conv2(conv1(input)));
 
@@ -154,8 +153,7 @@ TEST(Tape, TestMLP) {
   for (int i = 0; i < 2; ++i) {
     reset_global_tape();
 
-    VariableHandle input(new Variable("input"));
-    filler(input);
+    auto input = filler();
 
     auto loss = mean(linear2(linear1(input)));
     LOG(INFO) << loss->Value();
