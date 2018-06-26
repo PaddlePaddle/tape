@@ -70,31 +70,6 @@ void init_params(VariableHandle v,
   }
 }
 
-VariableHandle mean(VariableHandle x) {
-  VariableHandle out(new Variable("mean"));
-  get_global_tape().AddOp("mean", {{"X", {x}}}, {{"Out", {out}}}, {});
-  return out;
-}
-
-VariableHandle relu(VariableHandle x) {
-  VariableHandle out(new Variable("relu"));
-  get_global_tape().AddOp("relu", {{"X", {x}}}, {{"Out", {out}}}, {});
-  return out;
-}
-
-VariableHandle softmax(VariableHandle x) {
-  VariableHandle out(new Variable("softmax"));
-  get_global_tape().AddOp("softmax", {{"X", {x}}}, {{"Out", {out}}}, {});
-  return out;
-}
-
-VariableHandle cross_entropy(VariableHandle x, VariableHandle label) {
-  VariableHandle out(new Variable("cross_entropy"));
-  get_global_tape().AddOp(
-      "cross_entropy", {{"X", {x}}, {"Label", {label}}}, {{"Y", {out}}}, {});
-  return out;
-}
-
 class Linear {
  public:
   Linear(int in_dim, int out_dim, const std::string &act)
@@ -118,17 +93,19 @@ class Linear {
     init_params(b_, "fill_constant", attrs);
   }
 
-  VariableHandle operator()(VariableHandle input) {
+  VariableHandle operator()(VariableHandle input,
+                            const framework::AttributeMap &mul_op_attrs = {},
+                            const framework::AttributeMap &add_op_attrs = {}) {
     VariableHandle pre_bias(new Variable("linear"));
     get_global_tape().AddOp("mul",
                             {{"X", {input}}, {"Y", {w_}}},
                             {{"Out", {pre_bias}}},
-                            {{"x_num_col_dims", 1}, {"y_num_col_dims", 1}});
+                            mul_op_attrs);
     VariableHandle pre_act(new Variable("linear"));
     get_global_tape().AddOp("elementwise_add",
                             {{"X", {pre_bias}}, {"Y", {b_}}},
                             {{"Out", {pre_act}}},
-                            {{"axis", 1}});
+                            add_op_attrs);
     VariableHandle post_act(new Variable("linear"));
     get_global_tape().AddOp(
         act_, {{"X", {pre_act}}}, {{"Out", {post_act}}}, {});
@@ -145,7 +122,7 @@ class Linear {
 
 class Convolution2D {
  public:
-  Convolution2D(int c_in, int c_out, int f, std::string act)
+  Convolution2D(int c_in, int c_out, int f, const std::string &act)
       : w_(new Variable("ConvolutionWeight")),
         b_(new Variable("ConvolutionBias")),
         act_(act) {
@@ -167,23 +144,20 @@ class Convolution2D {
     init_params(b_, "fill_constant", attrs);
   }
 
-  VariableHandle operator()(VariableHandle input) {
+  VariableHandle operator()(
+      VariableHandle input,
+      const framework::AttributeMap &conv_op_attrs = {},
+      const framework::AttributeMap &add_op_attrs = {{"axis", 1}}) {
     VariableHandle pre_bias(new Variable("conv"));
     get_global_tape().AddOp("conv2d",
                             {{"Input", {input}}, {"Filter", {w_}}},
                             {{"Output", {pre_bias}}},
-                            {{"strides", std::vector<int>{1, 1}},
-                             {"paddings", std::vector<int>{0, 0}},
-                             {"dilations", std::vector<int>{1, 1}},
-                             {"groups", 1},
-                             {"use_cudnn", false},
-                             {"use_mkldnn", false},
-                             {"data_format", std::string("AnyLayout")}});
+                            conv_op_attrs);
     VariableHandle pre_act(new Variable("conv"));
     get_global_tape().AddOp("elementwise_add",
                             {{"X", {pre_bias}}, {"Y", {b_}}},
                             {{"Out", {pre_act}}},
-                            {{"axis", 1}});
+                            add_op_attrs);
     VariableHandle post_act(new Variable("conv"));
     get_global_tape().AddOp(
         act_, {{"X", {pre_act}}}, {{"Out", {post_act}}}, {});
@@ -225,6 +199,104 @@ class SGD {
  private:
   VariableHandle learning_rate_;
 };
+
+class BatchNorm {
+ public:
+  BatchNorm(int channel_in, const std::string &act)
+      : scale_(new Variable("BatchNormScale")),
+        bias_(new Variable("BatchNormBias")),
+        mean_(new Variable("BatchNormMean")),
+        variance_(new Variable("BatchNormVariance")),
+        act_(act) {
+    // Use fill one to initialize scale and variance
+    framework::AttributeMap attrs;
+    attrs["dtype"] = paddle::framework::proto::VarType::Type::VarType_Type_FP32;
+    attrs["shape"] = std::vector<int>{channel_in};
+    attrs["value"] = 1.0f;
+    init_params(scale_, "fill_constant", attrs);
+    init_params(variance_, "fill_constant", attrs);
+
+    // Use fill zero to initialize bias and mean
+    attrs["value"] = 0.0f;
+    init_params(bias_, "fill_constant", attrs);
+    init_params(mean_, "fill_constant", attrs);
+  }
+
+  VariableHandle operator()(VariableHandle x,
+                            const framework::AttributeMap &attrs = {}) {
+    VariableHandle pre_act(new Variable("batch_norm"));
+    VariableHandle tmp_mean(new Variable("tmp_mean"));
+    VariableHandle tmp_var(new Variable("tmp_var"));
+    get_global_tape().AddOp("batch_norm",
+                            {{"X", {x}},
+                             {"Scale", {scale_}},
+                             {"Bias", {bias_}},
+                             {"Mean", {mean_}},
+                             {"Variance", {variance_}}},
+                            {{"Y", {pre_act}},
+                             {"MeanOut", {mean_}},
+                             {"VarianceOut", {variance_}},
+                             {"SavedMean", {tmp_mean}},
+                             {"SavedVariance", {tmp_var}}},
+                            attrs);
+
+    VariableHandle post_act(new Variable("batch_norm"));
+    get_global_tape().AddOp(
+        act_, {{"X", {pre_act}}}, {{"Out", {post_act}}}, {});
+    return post_act;
+  }
+
+  // Only scale and bias need to be updated by SGD
+  std::vector<VariableHandle> Params() { return {scale_, bias_}; }
+
+ private:
+  VariableHandle scale_;
+  VariableHandle bias_;
+  VariableHandle mean_;
+  VariableHandle variance_;
+  std::string act_;
+};
+
+VariableHandle pool2d(VariableHandle x,
+                      const framework::AttributeMap &attrs = {}) {
+  VariableHandle out(new Variable("pool2d"));
+  get_global_tape().AddOp("pool2d", {{"X", {x}}}, {{"Out", {out}}}, attrs);
+  return out;
+}
+
+VariableHandle dropout(VariableHandle x,
+                       const framework::AttributeMap &attrs = {}) {
+  VariableHandle out(new Variable("dropout"));
+  VariableHandle mask(new Variable("mask"));
+  get_global_tape().AddOp(
+      "dropout", {{"X", {x}}}, {{"Out", {out}}, {"Mask", {mask}}}, attrs);
+  return out;
+}
+
+VariableHandle mean(VariableHandle x) {
+  VariableHandle out(new Variable("mean"));
+  get_global_tape().AddOp("mean", {{"X", {x}}}, {{"Out", {out}}}, {});
+  return out;
+}
+
+VariableHandle relu(VariableHandle x) {
+  VariableHandle out(new Variable("relu"));
+  get_global_tape().AddOp("relu", {{"X", {x}}}, {{"Out", {out}}}, {});
+  return out;
+}
+
+VariableHandle softmax(VariableHandle x) {
+  VariableHandle out(new Variable("softmax"));
+  get_global_tape().AddOp("softmax", {{"X", {x}}}, {{"Out", {out}}}, {});
+  return out;
+}
+
+VariableHandle cross_entropy(VariableHandle x, VariableHandle label) {
+  VariableHandle out(new Variable("cross_entropy"));
+  get_global_tape().AddOp(
+      "cross_entropy", {{"X", {x}}, {"Label", {label}}}, {{"Y", {out}}}, {});
+  return out;
+}
 
 VariableHandle CreateRecordioFileReader(std::string filename,
                                         std::vector<int> shape_concat,
