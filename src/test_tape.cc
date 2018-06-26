@@ -43,8 +43,8 @@ TEST(Tape, TestDropout) {
   Fill filler(initializer, attrs);
 
   reset_global_tape();
-  VariableHandle input(new Variable("input"));
-  filler(input);
+
+  auto input = filler();
   auto loss = dropout(input);
   LOG(INFO) << input->Value();
   LOG(INFO) << loss->Value();
@@ -64,8 +64,8 @@ TEST(Tape, TestPool2d) {
   Fill filler(initializer, attrs);
 
   reset_global_tape();
-  VariableHandle input(new Variable("input"));
-  filler(input);
+
+  auto input = filler();
   auto loss = pool2d(input);
   LOG(INFO) << input->Value();
   LOG(INFO) << loss->Value();
@@ -90,8 +90,7 @@ TEST(Tape, TestBatchNorm) {
   for (int i = 0; i < 5; ++i) {
     reset_global_tape();
 
-    VariableHandle input(new Variable("input"));
-    filler(input);
+    auto input = filler();
 
     auto loss = bn(input);
 
