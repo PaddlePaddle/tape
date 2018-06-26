@@ -217,7 +217,7 @@ class Adam {
   void Update(VariableHandle input) {
     PADDLE_ENFORCE(get_global_tape().HasBeenBackwarded(),
                    "optimization must happen after the backward");
-    // initialize to 0 if the moments of this input haven't been created
+    // initialize states if they haven't been created
     if (states.find(input->Name()) == states.end()) {
       framework::AttributeMap attrs;
       attrs["dtype"] =
