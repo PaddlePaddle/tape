@@ -15,6 +15,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "paddle/fluid/framework/operator.h"  // framework::kGradVarSuffix
 #include "paddle/fluid/framework/program_desc.h"
@@ -79,6 +80,14 @@ class Variable {
     return var_.GetMutable<T>();
   }
 
+  std::vector<VariableHandle>* MutableHyperParams(
+      const std::string& optimizer) {
+    PADDLE_ENFORCE(hyperparams_.find(optimizer) != hyperparams_.end(),
+                   "%s optimizer is not supported",
+                   optimizer);
+    return &hyperparams_[optimizer];
+  }
+
  private:
   int count() {
     static int counter = 0;
@@ -90,6 +99,10 @@ class Variable {
 
   // Not own
   std::weak_ptr<Variable> grad_;
+
+  // Optimizer hyperparameters
+  std::unordered_map<std::string, std::vector<VariableHandle>> hyperparams_{
+      {"adam", {}}};
 };
 
 }  // namespace tape

@@ -19,6 +19,7 @@
 
 using paddle::tape::Linear;
 using paddle::tape::SGD;
+using paddle::tape::Adam;
 using paddle::tape::mean;
 using paddle::tape::softmax;
 using paddle::tape::cross_entropy;
@@ -43,7 +44,7 @@ TEST(Mnist, TestCPU) {
   Linear linear1(784, 200, "relu");
   Linear linear2(200, 200, "relu");
   Linear linear3(200, 10, "relu");
-  SGD sgd(0.001);
+  Adam adam(0.001);
 
   int print_step = 100;
   float avg_loss = 0.0;
@@ -67,13 +68,13 @@ TEST(Mnist, TestCPU) {
     get_global_tape().Backward(loss);
 
     for (auto w : linear1.Params()) {
-      sgd.Update(w);
+      adam.Update(w);
     }
     for (auto w : linear2.Params()) {
-      sgd.Update(w);
+      adam.Update(w);
     }
     for (auto w : linear3.Params()) {
-      sgd.Update(w);
+      adam.Update(w);
     }
   }
 }
