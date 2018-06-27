@@ -147,35 +147,41 @@ void Tape::Forward() {
   VLOG(3) << "Finishing forward -------------------------";
 }
 
-void DescMapToVarMap(
+void Tape::DescMapToVarMap(
     const unordered_map<string, VariableHandle> &name2var,
-    const framework::VariableNameMap &vmp,
+    const framework::VariableNameMap &variable_name_map,
     VariableHandleMap *vhm,
     vector<pair<VariableHandle, VariableHandle>> *duplicated_grad,
     bool is_output) {
-  for (auto &p2a : vmp) {
-    for (auto &argu : p2a.second) {
-      if (name2var.count(argu)) {
-        (*vhm)[p2a.first].push_back(name2var.at(argu));
+  for (auto &p2a : variable_name_map) {
+    for (auto &arg : p2a.second) {
+      auto &param = p2a.first;
+      if (name2var.count(arg)) {
+        (*vhm)[param].push_back(name2var.at(arg));
       } else {
-        PADDLE_ENFORCE(ends_with(argu, framework::kGradVarSuffix),
+        PADDLE_ENFORCE(ends_with(arg, framework::kGradVarSuffix),
                        "%s not end with %s",
-                       argu,
+                       arg,
                        framework::kGradVarSuffix);
         string name =
-            argu.substr(0, argu.size() - strlen(framework::kGradVarSuffix));
+            arg.substr(0, arg.size() - strlen(framework::kGradVarSuffix));
         PADDLE_ENFORCE(name2var.count(name), "%s not found", name);
         if (is_output && name2var.at(name)->GradExist()) {
+          // Sum duplicated grad
           VariableHandle temp_grad(new Variable(
               name + framework::kGradVarSuffix + framework::kTempVarName));
-          (*vhm)[p2a.first].emplace_back(temp_grad);
-          duplicated_grad->emplace_back(name2var.at(name)->Grad(),
-                                        temp_grad);  // name2var[name]->Grad has
-                                                     // to be the first element
-                                                     // since sum_op use X[0] ==
-                                                     // Out to determine inplace
+          // name2var[name]->Grad has to be the first element since sum_op use
+          // X[0] == Out to determine inplace
+          duplicated_grad->emplace_back(name2var.at(name)->Grad(), temp_grad);
+          (*vhm)[param].emplace_back(temp_grad);
+        } else if (!is_output && !name2var.at(name)->GradExist()) {
+          // zero initialize empty grad
+          auto var = name2var.at(name);
+          backward_tape_->AddOp(
+              "fill_zeros_like", {{"X", {var}}}, {{"Out", {var->Grad()}}}, {});
+          (*vhm)[param].push_back(var->Grad());
         } else {
-          (*vhm)[p2a.first].push_back(name2var.at(name)->Grad());
+          (*vhm)[param].push_back(name2var.at(name)->Grad());
         }
       }
     }
@@ -232,8 +238,6 @@ void Tape::Backward(VariableHandle target) {
                               {});
       }
     }
-
-    // TODO(tonyyang-svail): how to fill empty grad?
   }
 
   backward_tape_->Forward();
