@@ -219,7 +219,7 @@ class Adam {
   void Update(VariableHandle input) {
     PADDLE_ENFORCE(get_global_tape().HasBeenBackwarded(),
                    "optimization must happen after the backward");
-    auto hyperparams = input->MutableHyperParams();
+    auto *hyperparams = input->MutableHyperParams("adam");
     // initialize states if they haven't been created
     if (hyperparams->empty()) {
       framework::AttributeMap attrs;
