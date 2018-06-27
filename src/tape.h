@@ -84,7 +84,7 @@ class Tape {
   bool HasBeenBackwarded() { return has_been_backwarded_; }
 
  private:
-  void Tape::DescMapToVarMap(
+  void DescMapToVarMap(
       const std::unordered_map<std::string, VariableHandle> &name2var,
       const framework::VariableNameMap &variable_name_map,
       VariableHandleMap *vhm,

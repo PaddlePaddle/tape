@@ -159,23 +159,26 @@ void Tape::DescMapToVarMap(
       if (name2var.count(arg)) {
         (*vhm)[param].push_back(name2var.at(arg));
       } else {
-        PADDLE_ENFORCE(ends_with(arg, framework::kGradVarSuffix),
-                       "%s not end with %s",
-                       arg,
-                       framework::kGradVarSuffix);
+        PADDLE_ENFORCE(
+            ends_with(arg, framework::kGradVarSuffix),
+            "Backward can only add gradient variable. %s not end with %s",
+            arg,
+            framework::kGradVarSuffix);
         string name =
             arg.substr(0, arg.size() - strlen(framework::kGradVarSuffix));
         PADDLE_ENFORCE(name2var.count(name), "%s not found", name);
-        if (is_output && name2var.at(name)->GradExist()) {
-          // Sum duplicated grad
+        if (is_output &&
+            name2var.at(name)->GradExist()) {  // Sum duplicated grad
           VariableHandle temp_grad(new Variable(
               name + framework::kGradVarSuffix + framework::kTempVarName));
-          // name2var[name]->Grad has to be the first element since sum_op use
-          // X[0] == Out to determine inplace
+          // we want sum duplicated grad to be in-place
+          // since sum_op uses X[0] == Out to determine inplace
+          // we assign name2var[name]->Grad to be the first element
           duplicated_grad->emplace_back(name2var.at(name)->Grad(), temp_grad);
           (*vhm)[param].emplace_back(temp_grad);
-        } else if (!is_output && !name2var.at(name)->GradExist()) {
-          // zero initialize empty grad
+        } else if (!is_output &&
+                   !name2var.at(name)
+                        ->GradExist()) {  // zero initialize empty grad
           auto var = name2var.at(name);
           backward_tape_->AddOp(
               "fill_zeros_like", {{"X", {var}}}, {{"Out", {var->Grad()}}}, {});
@@ -189,7 +192,7 @@ void Tape::DescMapToVarMap(
 }
 
 void Tape::Backward(VariableHandle target) {
-  PADDLE_ENFORCE(!has_been_backwarded_);
+  PADDLE_ENFORCE(!has_been_backwarded_, "A tape can only backward once.");
 
   Forward();
 
@@ -222,7 +225,7 @@ void Tape::Backward(VariableHandle target) {
       }
 
       vector<pair<VariableHandle, VariableHandle>>
-          duplicated_grad;  // vector of {grad, grad@temp}
+          duplicated_grad;  // {grad, grad@temp}
       VariableHandleMap in_vars, out_vars;
       DescMapToVarMap(
           name2var, op_grad_desc->Inputs(), &in_vars, &duplicated_grad, false);
