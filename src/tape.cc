@@ -118,6 +118,7 @@ void Tape::AddOp(const string &type,
   LOG(INFO) << "AddOp " << to_string(type, in_vars, out_vars, attrs);
   InferShapeAndVarType(type, in_vars, &out_vars, attrs);
   tape_.emplace_back(type, in_vars, out_vars, attrs);
+  Forward();
 }
 
 void Tape::Forward() {

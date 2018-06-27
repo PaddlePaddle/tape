@@ -377,6 +377,12 @@ VariableHandle cross_entropy(VariableHandle x, VariableHandle label) {
       "cross_entropy", {{"X", {x}}, {"Label", {label}}}, {{"Y", {out}}}, {});
   return out;
 }
+  
+VariableHandle concat(std::vector<VariableHandle> x) {
+  VariableHandle out(new Variable("concat"));
+  get_global_tape().AddOp("concat", {{"X", x}}, {{"Out", {out}}}, {});
+  return out;
+}
 
 VariableHandle add(VariableHandle x, VariableHandle y) {
   VariableHandle out(new Variable("add"));
