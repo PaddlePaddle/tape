@@ -15,6 +15,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "paddle/fluid/framework/operator.h"  // framework::kGradVarSuffix
 #include "paddle/fluid/framework/program_desc.h"
@@ -79,6 +80,8 @@ class Variable {
     return var_.GetMutable<T>();
   }
 
+  std::vector<VariableHandle>* MutableHyperParams() { return &hyperparams_; }
+
  private:
   int count() {
     static int counter = 0;
@@ -90,6 +93,9 @@ class Variable {
 
   // Not own
   std::weak_ptr<Variable> grad_;
+
+  // Adam Optimizer hyperparameter
+  std::vector<VariableHandle> hyperparams_;
 };
 
 }  // namespace tape

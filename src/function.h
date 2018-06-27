@@ -219,8 +219,9 @@ class Adam {
   void Update(VariableHandle input) {
     PADDLE_ENFORCE(get_global_tape().HasBeenBackwarded(),
                    "optimization must happen after the backward");
+    auto hyperparams = input->MutableHyperParams();
     // initialize states if they haven't been created
-    if (states.find(input->Name()) == states.end()) {
+    if (hyperparams->empty()) {
       framework::AttributeMap attrs;
       attrs["dtype"] =
           paddle::framework::proto::VarType::Type::VarType_Type_FP32;
@@ -238,14 +239,19 @@ class Adam {
       VariableHandle beta2_pow(new Variable("adam"));
       init_params(beta1_pow, "fill_constant", attrs);
       init_params(beta2_pow, "fill_constant", attrs);
-      states[input->Name()] =
-          std::make_tuple(moment1, moment2, beta1_pow, beta2_pow);
+
+      hyperparams->emplace_back(moment1);
+      hyperparams->emplace_back(moment2);
+      hyperparams->emplace_back(beta1_pow);
+      hyperparams->emplace_back(beta2_pow);
     }
 
-    auto moment1 = std::get<0>(states[input->Name()]);
-    auto moment2 = std::get<1>(states[input->Name()]);
-    auto beta1_pow = std::get<2>(states[input->Name()]);
-    auto beta2_pow = std::get<3>(states[input->Name()]);
+    PADDLE_ENFORCE_EQ(
+        hyperparams->size(), 4, "Adam should have four hyperparameters");
+    auto moment1 = hyperparams->at(0);
+    auto moment2 = hyperparams->at(1);
+    auto beta1_pow = hyperparams->at(2);
+    auto beta2_pow = hyperparams->at(3);
 
     beta1_pow->GetMutable<paddle::framework::LoDTensor>()->data<float>()[0] *=
         beta1_;
@@ -272,13 +278,6 @@ class Adam {
   VariableHandle learning_rate_;
   float beta1_;
   float beta2_;
-  // store the following items in order: first moment, second moment, beta1_pow,
-  // beta2_pow
-  std::unordered_map<
-      std::string,
-      std::
-          tuple<VariableHandle, VariableHandle, VariableHandle, VariableHandle>>
-      states;
 };
 
 class BatchNorm {
