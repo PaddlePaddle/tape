@@ -140,6 +140,7 @@ void Tape::DescMapToVarMap(
     const framework::VariableNameMap &variable_name_map,
     VariableHandleMap *vhm,
     vector<pair<VariableHandle, VariableHandle>> *duplicated_grad,
+    vector<pair<VariableHandle, VariableHandle>> *uninitialized_grad,
     bool is_output) {
   for (auto &p2a : variable_name_map) {
     for (auto &arg : p2a.second) {
@@ -168,8 +169,7 @@ void Tape::DescMapToVarMap(
                    !name2var.at(name)
                         ->GradExist()) {  // zero initialize empty grad
           auto var = name2var.at(name);
-          backward_tape_->AddOp(
-              "fill_zeros_like", {{"X", {var}}}, {{"Out", {var->Grad()}}}, {});
+          uninitialized_grad->emplace_back(var, var->Grad());
           (*vhm)[param].push_back(var->Grad());
         } else {
           (*vhm)[param].push_back(name2var.at(name)->Grad());
@@ -214,12 +214,28 @@ void Tape::Backward(VariableHandle target) {
 
       vector<pair<VariableHandle, VariableHandle>>
           duplicated_grad;  // {grad, grad@temp}
+      vector<pair<VariableHandle, VariableHandle>>
+          uninitialized_grad;  // {var, var_grad}
       VariableHandleMap in_vars, out_vars;
-      DescMapToVarMap(
-          name2var, op_grad_desc->Inputs(), &in_vars, &duplicated_grad, false);
-      DescMapToVarMap(
-          name2var, op_grad_desc->Outputs(), &out_vars, &duplicated_grad, true);
+      DescMapToVarMap(name2var,
+                      op_grad_desc->Inputs(),
+                      &in_vars,
+                      &duplicated_grad,
+                      &uninitialized_grad,
+                      false);
+      DescMapToVarMap(name2var,
+                      op_grad_desc->Outputs(),
+                      &out_vars,
+                      &duplicated_grad,
+                      &uninitialized_grad,
+                      true);
 
+      for (auto &pair : uninitialized_grad) {
+        backward_tape_->AddOp("fill_zeros_like",
+                              {{"X", {pair.first}}},
+                              {{"Out", {pair.second}}},
+                              {});
+      }
       backward_tape_->AddOp(
           op_grad_desc->Type(), in_vars, out_vars, op_grad_desc->GetAttrMap());
       for (auto &pair : duplicated_grad) {
