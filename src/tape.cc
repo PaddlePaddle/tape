@@ -117,14 +117,14 @@ void Tape::AddOp(const string &type,
   PADDLE_ENFORCE(!has_been_backwarded_);
   LOG(INFO) << "AddOp " << to_string(type, in_vars, out_vars, attrs);
   InferShapeAndVarType(type, in_vars, &out_vars, attrs);
-  tape_.emplace_back(type, in_vars, out_vars, attrs);
+  ops_.emplace_back(type, in_vars, out_vars, attrs);
 }
 
 void Tape::Forward() {
   VLOG(3) << "Starting forward -------------------------";
-  while (current_position_ < tape_.size()) {
+  while (current_position_ < ops_.size()) {
     PADDLE_ENFORCE(!has_been_backwarded_);
-    OpHandle &op = tape_[current_position_];
+    OpHandle &op = ops_[current_position_];
     framework::OpDesc op_desc =
         CreateOpDesc(op.type_, op.inputs_, op.outputs_, op.attrs_);
     ScopeWrapper scope(op.inputs_, op.outputs_);
@@ -190,7 +190,7 @@ void Tape::Backward(VariableHandle target) {
   backward_tape_->AddOp(
       "fill_ones_like", {{"X", {target}}}, {{"Out", {target->Grad()}}}, {});
 
-  for (auto it = tape_.rbegin(); it != tape_.rend(); ++it) {
+  for (auto it = ops_.rbegin(); it != ops_.rend(); ++it) {
     framework::OpDesc op_desc =
         CreateOpDesc(it->type_, it->inputs_, it->outputs_, it->attrs_);
     unordered_map<string, string> grad_to_var;
@@ -249,6 +249,63 @@ void Tape::Backward(VariableHandle target) {
 
   backward_tape_->Forward();
   has_been_backwarded_ = true;
+}
+
+void GraphVizHelper(std::ostream &ss,
+                    const std::vector<OpHandle> &ops,
+                    bool is_forward) {
+  std::string node_prefix = is_forward ? "_op" : "op_grad";
+  ss << "subgraph cluster_" << std::to_string(is_forward ? 0 : 1) << " {\n";
+  ss << "node [shape=record,style=filled];\n";
+  ss << "style=filled;\n";
+  ss << "color=lightgrey;\n";
+  for (size_t i = 0; i < ops.size(); ++i) {
+    auto &op = ops[i];
+    std::string op_node = node_prefix + std::to_string(i);
+    ss << op_node << " [label=" << op.type_ << ", shape=box]\n";
+  }
+  if (is_forward) {
+    ss << node_prefix + std::to_string(0);
+    for (size_t i = 1; i < ops.size(); ++i) {
+      ss << "->" << node_prefix + std::to_string(i);
+    }
+    ss << "\nlabel=\"forward tape\"";
+  } else {
+    ss << node_prefix + std::to_string(ops.size() - 1);
+    for (int i = ops.size() - 2; i >= 0; --i) {
+      ss << "->" << node_prefix + std::to_string(i);
+    }
+    ss << " [dir=back]\nlabel=\"backward tape\"";
+  }
+  ss << "\n}\n";
+  for (size_t i = 0; i < ops.size(); ++i) {
+    auto &op = ops[i];
+    std::string op_node = node_prefix + std::to_string(i);
+    for (auto &p2a : op.inputs_) {
+      for (auto &arg : p2a.second) {
+        ss << "\"" << arg->Name() << "\" -> " << op_node << "\n";
+      }
+    }
+    for (auto &p2a : op.outputs_) {
+      for (auto &arg : p2a.second) {
+        ss << op_node << " -> \"" << arg->Name() << "\"\n";
+      }
+    }
+  }
+}
+
+std::string Tape::GraphVizString(bool with_backward) {
+  std::stringstream ss;
+
+  ss << "Please copy to http://www.webgraphviz.com/ for better visualization\n";
+  ss << "digraph G {\n";
+  GraphVizHelper(ss, ops_, true);
+  if (with_backward) {
+    GraphVizHelper(ss, backward_tape_->ops_, false);
+  }
+  ss << "}\n";
+
+  return ss.str();
 }
 
 Tape &get_global_tape() {

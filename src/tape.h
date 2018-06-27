@@ -83,6 +83,8 @@ class Tape {
 
   bool HasBeenBackwarded() { return has_been_backwarded_; }
 
+  std::string GraphVizString(bool with_backward = true);
+
  private:
   /*
    * Construct vhm based on name2var, variable_name_map
@@ -103,7 +105,7 @@ class Tape {
   bool has_been_backwarded_ = false;
   size_t current_position_ = 0;
 
-  std::vector<OpHandle> tape_;
+  std::vector<OpHandle> ops_;
   std::shared_ptr<Tape> backward_tape_;
 };
 
