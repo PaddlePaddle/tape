@@ -18,6 +18,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "paddle/fluid/framework/data_type.h"
@@ -31,45 +32,40 @@
 namespace paddle {
 namespace tape {
 
+using std::map;
+using std::pair;
+using std::unordered_map;
+using std::string;
+using std::unique_ptr;
+using std::vector;
+
 // borrowed from
 // https://stackoverflow.com/questions/874134/find-if-string-ends-with-another-string-in-c
-inline bool ends_with(std::string const &value, std::string const &ending) {
+inline bool ends_with(string const &value, string const &ending) {
   if (ending.size() > value.size()) return false;
   return std::equal(ending.rbegin(), ending.rend(), value.rbegin());
 }
 
-std::ostream &operator<<(std::ostream &os, const framework::VarDesc &var_desc) {
-  os << var_desc.Name();
-  os << "[" << var_desc.GetType() << "]";
-  os << "[" << var_desc.GetDataType() << "]";
-  os << "{";
-  for (auto &i : var_desc.GetShape()) {
-    os << i << ",";
-  }
-  os << "}";
-  return os;
-}
-
-std::string to_string(const std::string &type,
-                      const VariableHandleMap &in_vars,
-                      const VariableHandleMap &out_vars,
-                      const framework::AttributeMap &attrs) {
+string to_string(const string &type,
+                 const VariableHandleMap &in_vars,
+                 const VariableHandleMap &out_vars,
+                 const framework::AttributeMap &attrs) {
   std::stringstream ss;
   ss << type << " ";
   for (auto &param_name : in_vars) {
     for (auto &var : param_name.second) {
-      ss << param_name.first << ":(" << var << ") ";
+      ss << param_name.first << ":(" << var->Name() << ") ";
     }
   }
   for (auto &param_name : out_vars) {
     for (auto &var : param_name.second) {
-      ss << param_name.first << ":(" << var << ") ";
+      ss << param_name.first << ":(" << var->Name() << ") ";
     }
   }
   return ss.str();
 }
 
-framework::OpDesc CreateOpDesc(const std::string &type,
+framework::OpDesc CreateOpDesc(const string &type,
                                const VariableHandleMap &in_vars,
                                const VariableHandleMap &out_vars,
                                const framework::AttributeMap &attrs) {
@@ -90,7 +86,7 @@ framework::OpDesc CreateOpDesc(const std::string &type,
   return op_desc;
 }
 
-void InferShapeAndVarType(const std::string &type,
+void InferShapeAndVarType(const string &type,
                           const VariableHandleMap &in_vars,
                           VariableHandleMap *out_vars,
                           const framework::AttributeMap &attrs) {
@@ -114,11 +110,12 @@ void InferShapeAndVarType(const std::string &type,
   op_with_kernel->InferShape(&infer_shape_ctx);
 }
 
-void Tape::AddOp(const std::string &type,
+void Tape::AddOp(const string &type,
                  const VariableHandleMap &in_vars,
                  VariableHandleMap out_vars,
                  const framework::AttributeMap &attrs) {
   PADDLE_ENFORCE(!has_been_backwarded_);
+  LOG(INFO) << "AddOp " << to_string(type, in_vars, out_vars, attrs);
   InferShapeAndVarType(type, in_vars, &out_vars, attrs);
   tape_.emplace_back(type, in_vars, out_vars, attrs);
 }
@@ -138,29 +135,72 @@ void Tape::Forward() {
   VLOG(3) << "Finishing forward -------------------------";
 }
 
+void Tape::DescMapToVarMap(
+    const unordered_map<string, VariableHandle> &name2var,
+    const framework::VariableNameMap &variable_name_map,
+    VariableHandleMap *vhm,
+    vector<pair<VariableHandle, VariableHandle>> *duplicated_grad,
+    vector<pair<VariableHandle, VariableHandle>> *uninitialized_grad,
+    bool is_output) {
+  for (auto &p2a : variable_name_map) {
+    for (auto &arg : p2a.second) {
+      auto &param = p2a.first;
+      if (name2var.count(arg)) {
+        (*vhm)[param].push_back(name2var.at(arg));
+      } else {
+        PADDLE_ENFORCE(
+            ends_with(arg, framework::kGradVarSuffix),
+            "Backward can only add gradient variable. %s not end with %s",
+            arg,
+            framework::kGradVarSuffix);
+        string name =
+            arg.substr(0, arg.size() - strlen(framework::kGradVarSuffix));
+        PADDLE_ENFORCE(name2var.count(name), "%s not found", name);
+        if (is_output &&
+            name2var.at(name)->GradExist()) {  // Sum duplicated grad
+          VariableHandle temp_grad(new Variable(
+              name + framework::kGradVarSuffix + framework::kTempVarName));
+          // we want sum duplicated grad to be in-place
+          // since sum_op uses X[0] == Out to determine inplace
+          // we assign name2var[name]->Grad to be the first element
+          duplicated_grad->emplace_back(name2var.at(name)->Grad(), temp_grad);
+          (*vhm)[param].emplace_back(temp_grad);
+        } else if (!is_output &&
+                   !name2var.at(name)
+                        ->GradExist()) {  // zero initialize empty grad
+          auto var = name2var.at(name);
+          uninitialized_grad->emplace_back(var, var->Grad());
+          (*vhm)[param].push_back(var->Grad());
+        } else {
+          (*vhm)[param].push_back(name2var.at(name)->Grad());
+        }
+      }
+    }
+  }
+}
+
 void Tape::Backward(VariableHandle target) {
-  PADDLE_ENFORCE(!has_been_backwarded_);
+  PADDLE_ENFORCE(!has_been_backwarded_, "A tape can only backward once.");
 
   Forward();
 
   // TODO(tonyyang-svail): check output of last op is target
   backward_tape_.reset(new Tape());
 
-  // FIXME(tonyyang-svail): Need to infer_data_type
   backward_tape_->AddOp(
       "fill_ones_like", {{"X", {target}}}, {{"Out", {target->Grad()}}}, {});
 
   for (auto it = tape_.rbegin(); it != tape_.rend(); ++it) {
     framework::OpDesc op_desc =
         CreateOpDesc(it->type_, it->inputs_, it->outputs_, it->attrs_);
-    std::unordered_map<std::string, std::string> grad_to_var;
-    std::vector<std::unique_ptr<framework::OpDesc>> grad_op_descs =
+    unordered_map<string, string> grad_to_var;
+    vector<unique_ptr<framework::OpDesc>> grad_op_descs =
         framework::OpInfoMap::Instance()
             .Get(op_desc.Type())
             .GradOpMaker()(op_desc, {}, &grad_to_var, {});
 
-    for (auto &op_desc : grad_op_descs) {
-      std::unordered_map<std::string, VariableHandle> name2var;
+    for (auto &op_grad_desc : grad_op_descs) {
+      unordered_map<string, VariableHandle> name2var;
       for (auto &param2vars : it->inputs_) {
         for (auto &a : param2vars.second) {
           name2var[a->Name()] = a;
@@ -172,36 +212,39 @@ void Tape::Backward(VariableHandle target) {
         }
       }
 
-      VariableHandleMap in_vars;
-      VariableHandleMap out_vars;
-      std::map<const framework::VariableNameMap *, VariableHandleMap *>
-          loop_over{{&op_desc->Inputs(), &in_vars},
-                    {&op_desc->Outputs(), &out_vars}};
-      for (auto &each : loop_over) {
-        auto &vmp = *each.first;
-        auto &vhm = *each.second;
-        for (auto &p2a : vmp) {
-          for (auto &argu : p2a.second) {
-            if (name2var.count(argu)) {
-              vhm[p2a.first].push_back(name2var[argu]);
-            } else {
-              PADDLE_ENFORCE(ends_with(argu, framework::kGradVarSuffix),
-                             argu.c_str());
-              std::string name = argu.substr(
-                  0, argu.size() - std::strlen(framework::kGradVarSuffix));
-              PADDLE_ENFORCE(name2var.count(name), name.c_str());
-              vhm[p2a.first].push_back(name2var[name]->Grad());
-            }
-          }
-        }
+      vector<pair<VariableHandle, VariableHandle>>
+          duplicated_grad;  // {grad, grad@temp}
+      vector<pair<VariableHandle, VariableHandle>>
+          uninitialized_grad;  // {var, var_grad}
+      VariableHandleMap in_vars, out_vars;
+      DescMapToVarMap(name2var,
+                      op_grad_desc->Inputs(),
+                      &in_vars,
+                      &duplicated_grad,
+                      &uninitialized_grad,
+                      false);
+      DescMapToVarMap(name2var,
+                      op_grad_desc->Outputs(),
+                      &out_vars,
+                      &duplicated_grad,
+                      &uninitialized_grad,
+                      true);
+
+      for (auto &pair : uninitialized_grad) {
+        backward_tape_->AddOp("fill_zeros_like",
+                              {{"X", {pair.first}}},
+                              {{"Out", {pair.second}}},
+                              {});
       }
-
       backward_tape_->AddOp(
-          op_desc->Type(), in_vars, out_vars, op_desc->GetAttrMap());
+          op_grad_desc->Type(), in_vars, out_vars, op_grad_desc->GetAttrMap());
+      for (auto &pair : duplicated_grad) {
+        backward_tape_->AddOp("sum",
+                              {{"X", {pair.first, pair.second}}},
+                              {{"Out", {pair.first}}},
+                              {});
+      }
     }
-
-    // TODO(tonyyang-svail): how to fill empty grad?
-    // TODO(tonyyang-svail): Sum var grad is necessary
   }
 
   backward_tape_->Forward();

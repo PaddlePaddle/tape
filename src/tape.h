@@ -16,6 +16,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "src/variable.h"
@@ -83,6 +84,22 @@ class Tape {
   bool HasBeenBackwarded() { return has_been_backwarded_; }
 
  private:
+  /*
+   * Construct vhm based on name2var, variable_name_map
+   *
+   * During the construction, record duplicated gradient and
+   * uninitialzied gradient.
+   */
+  using std::vector;
+  using std::pair;
+  void DescMapToVarMap(
+      const std::unordered_map<std::string, VariableHandle> &name2var,
+      const framework::VariableNameMap &variable_name_map,
+      VariableHandleMap *vhm,
+      vector<pair<VariableHandle, VariableHandle>> *duplicated_grad,
+      vector<pair<VariableHandle, VariableHandle>> *uninitialized_grad,
+      bool is_output);
+
   bool has_been_backwarded_ = false;
   size_t current_position_ = 0;
 

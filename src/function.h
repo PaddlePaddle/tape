@@ -378,6 +378,13 @@ VariableHandle cross_entropy(VariableHandle x, VariableHandle label) {
   return out;
 }
 
+VariableHandle add(VariableHandle x, VariableHandle y) {
+  VariableHandle out(new Variable("add"));
+  get_global_tape().AddOp(
+      "elementwise_add", {{"X", {x}}, {"Y", {y}}}, {{"Out", {out}}}, {});
+  return out;
+}
+
 VariableHandle CreateRecordioFileReader(std::string filename,
                                         std::vector<int> shape_concat,
                                         std::vector<int> ranks,

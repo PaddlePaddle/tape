@@ -45,6 +45,8 @@ class Variable {
 
   ~Variable() { VLOG(10) << "Deleting " << Name(); }
 
+  bool GradExist() { return !grad_.expired(); }
+
   VariableHandle Grad() {
     if (grad_.expired()) {
       VariableHandle new_grad(new Variable(name_, true));
@@ -54,12 +56,6 @@ class Variable {
       return VariableHandle(grad_);
     }
   }
-
-  // Stochastic Gradient Descent with Momentum
-  //  VariableHandle Momentum ();
-
-  //  void init(const std::string& initializer,
-  //            const framework::AttributeMap& attrs);
 
   // Evaluate a variable by running Forward() on the global tape
   const Variable& Value();
@@ -89,8 +85,8 @@ class Variable {
   }
 
  private:
-  int count() {
-    static int counter = 0;
+  int64_t count() {
+    static int64_t counter = 0;
     return counter++;
   }
 
