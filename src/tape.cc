@@ -46,18 +46,6 @@ inline bool ends_with(string const &value, string const &ending) {
   return std::equal(ending.rbegin(), ending.rend(), value.rbegin());
 }
 
-std::ostream &operator<<(std::ostream &os, const framework::VarDesc &var_desc) {
-  os << var_desc.Name();
-  os << "[" << var_desc.GetType() << "]";
-  os << "[" << var_desc.GetDataType() << "]";
-  os << "{";
-  for (auto &i : var_desc.GetShape()) {
-    os << i << ",";
-  }
-  os << "}";
-  return os;
-}
-
 string to_string(const string &type,
                  const VariableHandleMap &in_vars,
                  const VariableHandleMap &out_vars,
