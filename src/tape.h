@@ -88,6 +88,13 @@ class Tape {
 
   std::vector<OpHandle> tape_;
   std::shared_ptr<Tape> backward_tape_;
+
+  //  void DescMapToVarMap(const std::unordered_map<std::string, VariableHandle>
+  //  &name2var,
+  //                       const std::vector<std::pair<VariableHandle,
+  //                       VariableHandle>> &duplicated_grad,
+  //                       const std::pair<const framework::VariableNameMap
+  //                       *const, VariableHandleMap *> &each) const;
 };
 
 Tape &get_global_tape();

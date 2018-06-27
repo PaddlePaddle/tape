@@ -55,11 +55,7 @@ class Variable {
     }
   }
 
-  // Stochastic Gradient Descent with Momentum
-  //  VariableHandle Momentum ();
-
-  //  void init(const std::string& initializer,
-  //            const framework::AttributeMap& attrs);
+  bool GradExist() { return !grad_.expired(); }
 
   // Evaluate a variable by running Forward() on the global tape
   const Variable& Value();
