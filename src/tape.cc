@@ -88,17 +88,17 @@ framework::OpDesc CreateOpDesc(const string &type,
 
 void InferShapeAndVarType(const string &type,
                           const VariableHandleMap &in_vars,
-                          VariableHandleMap *out_vars,
+                          const VariableHandleMap &out_vars,
                           const framework::AttributeMap &attrs) {
   // Tape only supports LoDTensor
-  for (auto &param2var : *out_vars) {
+  for (auto &param2var : out_vars) {
     for (auto &var : param2var.second) {
       var->GetMutable<framework::LoDTensor>();
     }
   }
 
-  framework::OpDesc op_desc = CreateOpDesc(type, in_vars, *out_vars, attrs);
-  ScopeWrapper scope(in_vars, *out_vars);
+  framework::OpDesc op_desc = CreateOpDesc(type, in_vars, out_vars, attrs);
+  ScopeWrapper scope(in_vars, out_vars);
 
   // Tape only supports OperatorWithKernel
   auto op = framework::OpRegistry::CreateOp(op_desc);
@@ -112,11 +112,11 @@ void InferShapeAndVarType(const string &type,
 
 void Tape::AddOp(const string &type,
                  const VariableHandleMap &in_vars,
-                 VariableHandleMap out_vars,
+                 const VariableHandleMap &out_vars,
                  const framework::AttributeMap &attrs) {
   PADDLE_ENFORCE(!has_been_backwarded_);
   LOG(INFO) << "AddOp " << to_string(type, in_vars, out_vars, attrs);
-  InferShapeAndVarType(type, in_vars, &out_vars, attrs);
+  InferShapeAndVarType(type, in_vars, out_vars, attrs);
   ops_.emplace_back(type, in_vars, out_vars, attrs);
 }
 
@@ -307,6 +307,8 @@ std::string Tape::GraphVizString(bool with_backward) {
 
   return ss.str();
 }
+
+void RunOperator(const OpHandle &op) {}
 
 Tape &get_global_tape() {
   static Tape T;

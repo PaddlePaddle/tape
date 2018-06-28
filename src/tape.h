@@ -76,7 +76,7 @@ class Tape {
  public:
   void AddOp(const std::string &type,
              const VariableHandleMap &in_vars,
-             VariableHandleMap out_vars,
+             const VariableHandleMap &out_vars,
              const framework::AttributeMap &attrs);
   void Forward();
   void Backward(VariableHandle target);
@@ -106,6 +106,15 @@ class Tape {
   std::vector<OpHandle> ops_;
   std::shared_ptr<Tape> backward_tape_;
 };
+
+void RunOperator(const std::string &type,
+                 const VariableHandleMap &in_vars,
+                 const VariableHandleMap &out_vars,
+                 const framework::AttributeMap &attrs);
+void RunOperatorWithKernel(const std::string &type,
+                           const VariableHandleMap &in_vars,
+                           const VariableHandleMap &out_vars,
+                           const framework::AttributeMap &attrs);
 
 Tape &get_global_tape();
 

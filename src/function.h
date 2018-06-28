@@ -444,15 +444,14 @@ VariableHandle CreateRecordioFileReader(std::string filename,
 std::vector<VariableHandle> ReadNext(VariableHandle reader, bool repeat) {
   PADDLE_ENFORCE(reader->Var().IsType<framework::ReaderHolder>());
 
-  paddle::framework::LoDTensorArray data_holder;
-  reader->GetMutable<paddle::framework::ReaderHolder>()->ReadNext(&data_holder);
+  framework::LoDTensorArray data_holder;
+  reader->GetMutable<framework::ReaderHolder>()->ReadNext(&data_holder);
   if (data_holder.empty()) {
-    reader->GetMutable<paddle::framework::ReaderHolder>()->ReInit();
-    reader->GetMutable<paddle::framework::ReaderHolder>()->ReadNext(
-        &data_holder);
+    reader->GetMutable<framework::ReaderHolder>()->ReInit();
+    reader->GetMutable<framework::ReaderHolder>()->ReadNext(&data_holder);
     PADDLE_ENFORCE(!data_holder.empty(), "Error reading file.");
     if (!repeat) {
-      reader->GetMutable<paddle::framework::ReaderHolder>()->ReInit();
+      reader->GetMutable<framework::ReaderHolder>()->ReInit();
       return {};
     }
   }

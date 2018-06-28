@@ -30,11 +30,6 @@ using VariableHandle = std::shared_ptr<Variable>;
 
 std::ostream& operator<<(std::ostream&, const Variable&);
 
-/*
- * Combination of
- *     framework::VarDesc desc_;
- *     framework::Variable var_;
- */
 class Variable {
  public:
   explicit Variable(const std::string pre_fix)
