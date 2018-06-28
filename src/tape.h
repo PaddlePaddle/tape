@@ -16,20 +16,90 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
-#include "src/variable.h"
+#include "paddle/fluid/framework/operator.h"  // framework::kGradVarSuffix
+#include "paddle/fluid/framework/variable.h"
 
 namespace paddle {
 namespace tape {
 
+class Variable;
+using VariableHandle = std::shared_ptr<Variable>;
 using VariableHandleMap = std::map<std::string, std::vector<VariableHandle>>;
 
-framework::OpDesc CreateOpDesc(const std::string &type,
-                               const VariableHandleMap &in_vars,
-                               const VariableHandleMap &out_vars,
-                               const framework::AttributeMap &attrs);
+std::ostream &operator<<(std::ostream &, const Variable &);
+
+class Variable {
+ public:
+  explicit Variable(const std::string pre_fix)
+      : name_(pre_fix + std::to_string(count())) {}
+
+  Variable(const std::string pre_fix, bool is_grad)
+      : name_(pre_fix + (is_grad ? framework::kGradVarSuffix
+                                 : std::to_string(count()))) {}
+
+  ~Variable() { VLOG(10) << "Deleting " << Name(); }
+
+  bool GradExist() { return !grad_.expired(); }
+
+  VariableHandle Grad() {
+    if (grad_.expired()) {
+      VariableHandle new_grad(new Variable(name_, true));
+      grad_ = new_grad;
+      return new_grad;
+    } else {
+      return VariableHandle(grad_);
+    }
+  }
+
+  // Evaluate a variable by running Forward() on the global tape
+  const Variable &Value();
+
+  // TODO(tonyyang-svail): No need to expose name
+  std::string Name() const { return name_; }
+
+  const framework::Variable &Var() const { return var_; }
+  framework::Variable *MutableVar() { return &var_; }
+
+  template <typename T>
+  const T &Get() const {
+    return var_.Get<T>();
+  }
+
+  template <typename T>
+  T *GetMutable() {
+    return var_.GetMutable<T>();
+  }
+
+  // TODO(tonyyang-svail): move MutableHyperParams to parameter.h
+  std::vector<VariableHandle> *MutableHyperParams(
+      const std::string &optimizer) {
+    PADDLE_ENFORCE(hyperparams_.find(optimizer) != hyperparams_.end(),
+                   "%s optimizer is not supported",
+                   optimizer);
+    return &hyperparams_[optimizer];
+  }
+
+ private:
+  int64_t count() {
+    static int64_t counter = 0;
+    return counter++;
+  }
+
+  std::string name_;
+  framework::Variable var_;
+
+  // Not own
+  std::weak_ptr<Variable> grad_;
+
+  // Optimizer hyperparameters
+  // TODO(tonyyang-svail): move hyperparameters to parameter.h
+  std::unordered_map<std::string, std::vector<VariableHandle>> hyperparams_{
+      {"adam", {}}};
+};
 
 struct OpHandle {
   OpHandle(const std::string &type,
@@ -44,39 +114,11 @@ struct OpHandle {
   framework::AttributeMap attrs_;
 };
 
-// Temporary Scope for Operator::Run()
-class ScopeWrapper : public framework::Scope {
- public:
-  ScopeWrapper(const VariableHandleMap &in_vars,
-               const VariableHandleMap &out_vars) {
-    for (auto &v : in_vars) {
-      for (auto &vv : v.second) {
-        if (!vars_.count(vv->Name())) {
-          vars_[vv->Name()].reset(vv->MutableVar());
-        }
-      }
-    }
-    for (auto &v : out_vars) {
-      for (auto &vv : v.second) {
-        if (!vars_.count(vv->Name())) {
-          vars_[vv->Name()].reset(vv->MutableVar());
-        }
-      }
-    }
-  }
-
-  ~ScopeWrapper() {
-    for (auto &pair : vars_) {
-      pair.second.release();
-    }
-  }
-};
-
 class Tape {
  public:
   void AddOp(const std::string &type,
              const VariableHandleMap &in_vars,
-             VariableHandleMap out_vars,
+             const VariableHandleMap &out_vars,
              const framework::AttributeMap &attrs);
   void Forward();
   void Backward(VariableHandle target);
@@ -87,6 +129,8 @@ class Tape {
 
  private:
   /*
+   * Only used in backward
+   *
    * Construct vhm based on name2var, variable_name_map
    *
    * During the construction, record duplicated gradient and
@@ -106,6 +150,15 @@ class Tape {
   std::vector<OpHandle> ops_;
   std::shared_ptr<Tape> backward_tape_;
 };
+
+void RunOperator(const std::string &type,
+                 const VariableHandleMap &in_vars,
+                 const VariableHandleMap &out_vars,
+                 const framework::AttributeMap &attrs);
+void RunOperatorWithKernel(const std::string &type,
+                           const VariableHandleMap &in_vars,
+                           const VariableHandleMap &out_vars,
+                           const framework::AttributeMap &attrs);
 
 Tape &get_global_tape();
 

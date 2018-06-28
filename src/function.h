@@ -25,7 +25,6 @@
 #include "paddle/fluid/framework/reader.h"
 #include "paddle/fluid/framework/type_defs.h"
 #include "src/tape.h"
-#include "src/variable.h"
 
 namespace paddle {
 namespace tape {
@@ -64,14 +63,9 @@ void init_params(VariableHandle v,
                  const framework::AttributeMap &attrs) {
   if (initializer == "fill_constant") {
     // fill_constant is not OperatorWithKernel, so we can't add it to the tape
-    framework::OpDesc op_desc =
-        CreateOpDesc(initializer, {}, {{"Out", {v}}}, attrs);
-    ScopeWrapper scope({}, {{"Out", {v}}});
-    framework::OpRegistry::CreateOp(op_desc)->Run(scope, platform::CPUPlace());
+    RunOperator(initializer, {}, {{"Out", {v}}}, attrs);
   } else {
-    Tape init_tape;
-    init_tape.AddOp(initializer, {}, {{"Out", {v}}}, attrs);
-    init_tape.Forward();
+    RunOperatorWithKernel(initializer, {}, {{"Out", {v}}}, attrs);
   }
 }
 
@@ -428,15 +422,13 @@ VariableHandle CreateRecordioFileReader(std::string filename,
 
   VariableHandle reader(new paddle::tape::Variable("reader"));
 
-  framework::OpDesc op_desc = CreateOpDesc("create_recordio_file_reader",
-                                           {},
-                                           {{"Out", {reader}}},
-                                           {{"filename", filename},
-                                            {"shape_concat", shape_concat},
-                                            {"ranks", ranks},
-                                            {"lod_levels", lod_levels}});
-  ScopeWrapper scope({}, {{"Out", {reader}}});
-  framework::OpRegistry::CreateOp(op_desc)->Run(scope, platform::CPUPlace());
+  RunOperator("create_recordio_file_reader",
+              {},
+              {{"Out", {reader}}},
+              {{"filename", filename},
+               {"shape_concat", shape_concat},
+               {"ranks", ranks},
+               {"lod_levels", lod_levels}});
 
   return reader;
 }
@@ -444,15 +436,14 @@ VariableHandle CreateRecordioFileReader(std::string filename,
 std::vector<VariableHandle> ReadNext(VariableHandle reader, bool repeat) {
   PADDLE_ENFORCE(reader->Var().IsType<framework::ReaderHolder>());
 
-  paddle::framework::LoDTensorArray data_holder;
-  reader->GetMutable<paddle::framework::ReaderHolder>()->ReadNext(&data_holder);
+  framework::LoDTensorArray data_holder;
+  reader->GetMutable<framework::ReaderHolder>()->ReadNext(&data_holder);
   if (data_holder.empty()) {
-    reader->GetMutable<paddle::framework::ReaderHolder>()->ReInit();
-    reader->GetMutable<paddle::framework::ReaderHolder>()->ReadNext(
-        &data_holder);
+    reader->GetMutable<framework::ReaderHolder>()->ReInit();
+    reader->GetMutable<framework::ReaderHolder>()->ReadNext(&data_holder);
     PADDLE_ENFORCE(!data_holder.empty(), "Error reading file.");
     if (!repeat) {
-      reader->GetMutable<paddle::framework::ReaderHolder>()->ReInit();
+      reader->GetMutable<framework::ReaderHolder>()->ReInit();
       return {};
     }
   }

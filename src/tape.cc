@@ -39,6 +39,34 @@ using std::string;
 using std::unique_ptr;
 using std::vector;
 
+// Temporary Scope for Operator::Run()
+class ScopeWrapper : public framework::Scope {
+ public:
+  ScopeWrapper(const VariableHandleMap &in_vars,
+               const VariableHandleMap &out_vars) {
+    for (auto &v : in_vars) {
+      for (auto &vv : v.second) {
+        if (!vars_.count(vv->Name())) {
+          vars_[vv->Name()].reset(vv->MutableVar());
+        }
+      }
+    }
+    for (auto &v : out_vars) {
+      for (auto &vv : v.second) {
+        if (!vars_.count(vv->Name())) {
+          vars_[vv->Name()].reset(vv->MutableVar());
+        }
+      }
+    }
+  }
+
+  ~ScopeWrapper() {
+    for (auto &pair : vars_) {
+      pair.second.release();
+    }
+  }
+};
+
 // borrowed from
 // https://stackoverflow.com/questions/874134/find-if-string-ends-with-another-string-in-c
 inline bool ends_with(string const &value, string const &ending) {
@@ -88,17 +116,17 @@ framework::OpDesc CreateOpDesc(const string &type,
 
 void InferShapeAndVarType(const string &type,
                           const VariableHandleMap &in_vars,
-                          VariableHandleMap *out_vars,
+                          const VariableHandleMap &out_vars,
                           const framework::AttributeMap &attrs) {
   // Tape only supports LoDTensor
-  for (auto &param2var : *out_vars) {
+  for (auto &param2var : out_vars) {
     for (auto &var : param2var.second) {
       var->GetMutable<framework::LoDTensor>();
     }
   }
 
-  framework::OpDesc op_desc = CreateOpDesc(type, in_vars, *out_vars, attrs);
-  ScopeWrapper scope(in_vars, *out_vars);
+  framework::OpDesc op_desc = CreateOpDesc(type, in_vars, out_vars, attrs);
+  ScopeWrapper scope(in_vars, out_vars);
 
   // Tape only supports OperatorWithKernel
   auto op = framework::OpRegistry::CreateOp(op_desc);
@@ -112,11 +140,11 @@ void InferShapeAndVarType(const string &type,
 
 void Tape::AddOp(const string &type,
                  const VariableHandleMap &in_vars,
-                 VariableHandleMap out_vars,
+                 const VariableHandleMap &out_vars,
                  const framework::AttributeMap &attrs) {
   PADDLE_ENFORCE(!has_been_backwarded_);
   LOG(INFO) << "AddOp " << to_string(type, in_vars, out_vars, attrs);
-  InferShapeAndVarType(type, in_vars, &out_vars, attrs);
+  InferShapeAndVarType(type, in_vars, out_vars, attrs);
   ops_.emplace_back(type, in_vars, out_vars, attrs);
 }
 
@@ -131,7 +159,6 @@ void Tape::Forward() {
     framework::OpRegistry::CreateOp(op_desc)->Run(scope, platform::CPUPlace());
     current_position_++;
   }
-
   VLOG(3) << "Finishing forward -------------------------";
 }
 
@@ -308,11 +335,30 @@ std::string Tape::GraphVizString(bool with_backward) {
   return ss.str();
 }
 
+void RunOperator(const std::string &type,
+                 const VariableHandleMap &in_vars,
+                 const VariableHandleMap &out_vars,
+                 const framework::AttributeMap &attrs) {
+  framework::OpDesc op_desc = CreateOpDesc(type, in_vars, out_vars, attrs);
+  ScopeWrapper scope(in_vars, out_vars);
+  framework::OpRegistry::CreateOp(op_desc)->Run(scope, platform::CPUPlace());
+}
+
+void RunOperatorWithKernel(const std::string &type,
+                           const VariableHandleMap &in_vars,
+                           const VariableHandleMap &out_vars,
+                           const framework::AttributeMap &attrs) {
+  Tape temp_tape;
+  temp_tape.AddOp(type, in_vars, out_vars, attrs);
+  temp_tape.Forward();
+}
+
 Tape &get_global_tape() {
   static Tape T;
   return T;
 }
 
 void reset_global_tape() { get_global_tape() = Tape(); }
+
 }  // namespace tape
 }  // namespace paddle
