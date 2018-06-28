@@ -15,6 +15,7 @@
 #pragma once
 
 #include <cmath>
+#include <fstream>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -129,7 +130,7 @@ class Linear {
 
 class Convolution2D {
  public:
-  Convolution2D(int c_in, int c_out, int f, const std::string &act)
+  Convolution2D(int c_in, int c_out, int f, const std::string &act = "")
       : w_(new Variable("ConvolutionWeight")),
         b_(new Variable("ConvolutionBias")),
         act_(act) {
@@ -165,6 +166,9 @@ class Convolution2D {
                             {{"X", {pre_bias}}, {"Y", {b_}}},
                             {{"Out", {pre_act}}},
                             add_op_attrs);
+    if (act_.empty()) {
+      return pre_act;
+    }
     VariableHandle post_act(new Variable("conv"));
     get_global_tape().AddOp(
         act_, {{"X", {pre_act}}}, {{"Out", {post_act}}}, {});
@@ -285,7 +289,7 @@ class Adam {
 
 class BatchNorm {
  public:
-  BatchNorm(int channel_in, const std::string &act)
+  explicit BatchNorm(int channel_in, const std::string &act = "")
       : scale_(new Variable("BatchNormScale")),
         bias_(new Variable("BatchNormBias")),
         mean_(new Variable("BatchNormMean")),
@@ -322,7 +326,9 @@ class BatchNorm {
                              {"SavedMean", {tmp_mean}},
                              {"SavedVariance", {tmp_var}}},
                             attrs);
-
+    if (act_.empty()) {
+      return pre_act;
+    }
     VariableHandle post_act(new Variable("batch_norm"));
     get_global_tape().AddOp(
         act_, {{"X", {pre_act}}}, {{"Out", {post_act}}}, {});
@@ -408,6 +414,11 @@ VariableHandle CreateRecordioFileReader(std::string filename,
                                         std::vector<int> shape_concat,
                                         std::vector<int> ranks,
                                         std::vector<int> lod_levels) {
+  std::ifstream infile(filename);
+  PADDLE_ENFORCE(infile.good(),
+                 "%s doesn't exist; have you run create_mnist_recordio.py?",
+                 filename);
+
   VariableHandle reader(new paddle::tape::Variable("reader"));
 
   framework::OpDesc op_desc = CreateOpDesc("create_recordio_file_reader",
@@ -430,14 +441,14 @@ std::vector<VariableHandle> ReadNext(VariableHandle reader, bool repeat) {
   reader->GetMutable<paddle::framework::ReaderHolder>()->ReadNext(&data_holder);
   if (data_holder.empty()) {
     reader->GetMutable<paddle::framework::ReaderHolder>()->ReInit();
-    if (repeat) {
-      reader->GetMutable<paddle::framework::ReaderHolder>()->ReadNext(
-          &data_holder);
-    } else {
+    reader->GetMutable<paddle::framework::ReaderHolder>()->ReadNext(
+        &data_holder);
+    PADDLE_ENFORCE(!data_holder.empty(), "Error reading file.");
+    if (!repeat) {
+      reader->GetMutable<paddle::framework::ReaderHolder>()->ReInit();
       return {};
     }
   }
-  PADDLE_ENFORCE(!data_holder.empty(), "Error reading file.");
 
   std::vector<VariableHandle> rval;
   for (size_t i = 0; i < data_holder.size(); ++i) {

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <fstream>
 #include <numeric>
 #include <vector>
 
@@ -33,20 +32,9 @@ using paddle::tape::get_global_tape;
 using paddle::tape::CreateRecordioFileReader;
 using paddle::tape::ReadNext;
 
-bool is_file_exist(const std::string& fileName) {
-  std::ifstream infile(fileName);
-  return infile.good();
-}
-
 TEST(Mnist, TestCPU) {
   std::string filename1 = "/tmp/mnist_train.recordio";
   std::string filename2 = "/tmp/mnist_test.recordio";
-  PADDLE_ENFORCE(is_file_exist(filename1),
-                 "%s doesn't exist; have you run create_mnist_recordio.py",
-                 filename1);
-  PADDLE_ENFORCE(is_file_exist(filename2),
-                 "%s doesn't exist; have you run create_mnist_recordio.py",
-                 filename2);
   auto train_reader = CreateRecordioFileReader(
       filename1, {32, 1, 28, 28, 32, 1}, {4, 2}, {0, 0});
   auto test_reader = CreateRecordioFileReader(
