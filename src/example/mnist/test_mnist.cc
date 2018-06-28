@@ -13,13 +13,17 @@
 // limitations under the License.
 
 #include <fstream>
+#include <numeric>
+#include <vector>
 
 #include "gtest/gtest.h"
 #include "src/function.h"
 
+using paddle::tape::VariableHandle;
 using paddle::tape::Linear;
 using paddle::tape::SGD;
 using paddle::tape::Adam;
+using paddle::tape::accuracy;
 using paddle::tape::mean;
 using paddle::tape::softmax;
 using paddle::tape::cross_entropy;
@@ -35,35 +39,41 @@ bool is_file_exist(const std::string& fileName) {
 }
 
 TEST(Mnist, TestCPU) {
-  std::string filename = "/tmp/mnist.recordio";
-  PADDLE_ENFORCE(is_file_exist(filename),
-                 "file doesn't exist; have you run create_mnist_recordio.py");
-  auto reader = CreateRecordioFileReader(
-      filename, {32, 1, 28, 28, 32, 1}, {4, 2}, {0, 0});
+  std::string filename1 = "/tmp/mnist_train.recordio";
+  std::string filename2 = "/tmp/mnist_test.recordio";
+  PADDLE_ENFORCE(is_file_exist(filename1),
+                 "%s doesn't exist; have you run create_mnist_recordio.py",
+                 filename1);
+  PADDLE_ENFORCE(is_file_exist(filename2),
+                 "%s doesn't exist; have you run create_mnist_recordio.py",
+                 filename2);
+  auto train_reader = CreateRecordioFileReader(
+      filename1, {32, 1, 28, 28, 32, 1}, {4, 2}, {0, 0});
+  auto test_reader = CreateRecordioFileReader(
+      filename2, {32, 1, 28, 28, 32, 1}, {4, 2}, {0, 0});
 
-  Linear linear1(784, 200, "relu");
-  Linear linear2(200, 200, "relu");
-  Linear linear3(200, 10, "relu");
+  Linear linear1(784, 200, "tanh");
+  Linear linear2(200, 200, "tanh");
+  Linear linear3(200, 10, "softmax");
   Adam adam(0.001);
 
-  int print_step = 100;
-  float avg_loss = 0.0;
+  auto forward = [&](VariableHandle input) -> VariableHandle {
+    return linear3(linear2(linear1(input)));
+  };
 
-  for (int i = 0; i < 1000; ++i) {
+  int total_steps = 10000;
+  int print_step = 100;
+  float threshold = 0.90f;
+
+  for (int i = 0; i < total_steps; ++i) {
     reset_global_tape();
-    auto data_label = ReadNext(reader);
+    auto data_label = ReadNext(train_reader, true);
     auto data = data_label[0];
     auto label = data_label[1];
 
-    auto predict = softmax(linear3(linear2(linear1(data))));
+    auto predict = forward(data);
     auto loss = mean(cross_entropy(predict, label));
-
-    avg_loss +=
-        loss->Value().Get<paddle::framework::LoDTensor>().data<float>()[0];
-    if ((i + 1) % print_step == 0) {
-      LOG(INFO) << avg_loss / print_step;
-      avg_loss = 0;
-    }
+    auto precision = accuracy(predict, label);
 
     get_global_tape().Backward(loss);
 
@@ -75,6 +85,52 @@ TEST(Mnist, TestCPU) {
     }
     for (auto w : linear3.Params()) {
       adam.Update(w);
+    }
+
+    // Every time certain amount of batches have been processed,
+    // we test the average loss and accuracy on the test data set,
+    // we stop training when the accuracy hit some threshold
+    if ((i + 1) % print_step == 0) {
+      std::vector<float> losses;
+      std::vector<float> accuracies;
+
+      while (true) {
+        reset_global_tape();
+
+        auto data_label = ReadNext(test_reader, false);
+        if (data_label.empty()) {
+          break;
+        }
+
+        auto data = data_label[0];
+        auto label = data_label[1];
+
+        auto predict = forward(data);
+        auto loss = mean(cross_entropy(predict, label));
+        auto precision = accuracy(predict, label);
+
+        get_global_tape().Forward();
+
+        losses.push_back(
+            loss->Get<paddle::framework::LoDTensor>().data<float>()[0]);
+        accuracies.push_back(
+            precision->Get<paddle::framework::LoDTensor>().data<float>()[0]);
+      }
+
+      float avg_loss =
+          std::accumulate(losses.begin(), losses.end(), 0.0f) / losses.size();
+      float avg_accu =
+          std::accumulate(accuracies.begin(), accuracies.end(), 0.0f) /
+          accuracies.size();
+
+      LOG(INFO) << "Pass #" << (i + 1) / print_step
+                << ", test set evaluation result: Avg loss is " << avg_loss
+                << ", Avg accuracy is " << avg_accu;
+
+      if (avg_accu >= threshold) {
+        LOG(INFO) << "Meets target accuracy, stop training";
+        break;
+      }
     }
   }
 }

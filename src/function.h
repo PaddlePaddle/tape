@@ -76,7 +76,7 @@ void init_params(VariableHandle v,
 
 class Linear {
  public:
-  Linear(int in_dim, int out_dim, const std::string &act)
+  Linear(int in_dim, int out_dim, const std::string &act = "")
       : w_(new Variable("LinearWeight")),
         b_(new Variable("LinearBias")),
         act_(act) {
@@ -110,6 +110,9 @@ class Linear {
                             {{"X", {pre_bias}}, {"Y", {b_}}},
                             {{"Out", {pre_act}}},
                             add_op_attrs);
+    if (act_.empty()) {
+      return pre_act;
+    }
     VariableHandle post_act(new Variable("linear"));
     get_global_tape().AddOp(
         act_, {{"X", {pre_act}}}, {{"Out", {post_act}}}, {});
@@ -337,6 +340,29 @@ class BatchNorm {
   std::string act_;
 };
 
+// Calculate the top k accuracy of the prediction against the label
+VariableHandle accuracy(VariableHandle prediction,
+                        VariableHandle label,
+                        int k = 1) {
+  // Use top_k op to get top k prediction class labels
+  VariableHandle topk_values(new Variable("accuracy"));
+  VariableHandle topk_indices(new Variable("accuracy"));
+  get_global_tape().AddOp("top_k",
+                          {{"X", {prediction}}},
+                          {{"Out", {topk_values}}, {"Indices", {topk_indices}}},
+                          {{"k", k}});
+
+  VariableHandle acc_out(new Variable("accuracy"));
+  VariableHandle correct(new Variable("accuracy"));
+  VariableHandle total(new Variable("accuracy"));
+  get_global_tape().AddOp(
+      "accuracy",
+      {{"Out", {topk_values}}, {"Indices", {topk_indices}}, {"Label", {label}}},
+      {{"Accuracy", {acc_out}}, {"Correct", {correct}}, {"Total", {total}}},
+      {});
+  return acc_out;
+}
+
 VariableHandle pool2d(VariableHandle x,
                       const framework::AttributeMap &attrs = {}) {
   VariableHandle out(new Variable("pool2d"));
@@ -397,15 +423,19 @@ VariableHandle CreateRecordioFileReader(std::string filename,
   return reader;
 }
 
-std::vector<VariableHandle> ReadNext(VariableHandle reader) {
+std::vector<VariableHandle> ReadNext(VariableHandle reader, bool repeat) {
   PADDLE_ENFORCE(reader->Var().IsType<framework::ReaderHolder>());
 
   paddle::framework::LoDTensorArray data_holder;
   reader->GetMutable<paddle::framework::ReaderHolder>()->ReadNext(&data_holder);
   if (data_holder.empty()) {
     reader->GetMutable<paddle::framework::ReaderHolder>()->ReInit();
-    reader->GetMutable<paddle::framework::ReaderHolder>()->ReadNext(
-        &data_holder);
+    if (repeat) {
+      reader->GetMutable<paddle::framework::ReaderHolder>()->ReadNext(
+          &data_holder);
+    } else {
+      return {};
+    }
   }
   PADDLE_ENFORCE(!data_holder.empty(), "Error reading file.");
 
