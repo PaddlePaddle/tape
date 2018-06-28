@@ -44,34 +44,6 @@ struct OpHandle {
   framework::AttributeMap attrs_;
 };
 
-// Temporary Scope for Operator::Run()
-class ScopeWrapper : public framework::Scope {
- public:
-  ScopeWrapper(const VariableHandleMap &in_vars,
-               const VariableHandleMap &out_vars) {
-    for (auto &v : in_vars) {
-      for (auto &vv : v.second) {
-        if (!vars_.count(vv->Name())) {
-          vars_[vv->Name()].reset(vv->MutableVar());
-        }
-      }
-    }
-    for (auto &v : out_vars) {
-      for (auto &vv : v.second) {
-        if (!vars_.count(vv->Name())) {
-          vars_[vv->Name()].reset(vv->MutableVar());
-        }
-      }
-    }
-  }
-
-  ~ScopeWrapper() {
-    for (auto &pair : vars_) {
-      pair.second.release();
-    }
-  }
-};
-
 class Tape {
  public:
   void AddOp(const std::string &type,

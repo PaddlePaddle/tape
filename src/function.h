@@ -64,14 +64,9 @@ void init_params(VariableHandle v,
                  const framework::AttributeMap &attrs) {
   if (initializer == "fill_constant") {
     // fill_constant is not OperatorWithKernel, so we can't add it to the tape
-    framework::OpDesc op_desc =
-        CreateOpDesc(initializer, {}, {{"Out", {v}}}, attrs);
-    ScopeWrapper scope({}, {{"Out", {v}}});
-    framework::OpRegistry::CreateOp(op_desc)->Run(scope, platform::CPUPlace());
+    RunOperator(initializer, {}, {{"Out", {v}}}, attrs);
   } else {
-    Tape init_tape;
-    init_tape.AddOp(initializer, {}, {{"Out", {v}}}, attrs);
-    init_tape.Forward();
+    RunOperatorWithKernel(initializer, {}, {{"Out", {v}}}, attrs);
   }
 }
 
@@ -428,15 +423,13 @@ VariableHandle CreateRecordioFileReader(std::string filename,
 
   VariableHandle reader(new paddle::tape::Variable("reader"));
 
-  framework::OpDesc op_desc = CreateOpDesc("create_recordio_file_reader",
-                                           {},
-                                           {{"Out", {reader}}},
-                                           {{"filename", filename},
-                                            {"shape_concat", shape_concat},
-                                            {"ranks", ranks},
-                                            {"lod_levels", lod_levels}});
-  ScopeWrapper scope({}, {{"Out", {reader}}});
-  framework::OpRegistry::CreateOp(op_desc)->Run(scope, platform::CPUPlace());
+  RunOperator("create_recordio_file_reader",
+              {},
+              {{"Out", {reader}}},
+              {{"filename", filename},
+               {"shape_concat", shape_concat},
+               {"ranks", ranks},
+               {"lod_levels", lod_levels}});
 
   return reader;
 }

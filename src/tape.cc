@@ -39,6 +39,34 @@ using std::string;
 using std::unique_ptr;
 using std::vector;
 
+// Temporary Scope for Operator::Run()
+class ScopeWrapper : public framework::Scope {
+ public:
+  ScopeWrapper(const VariableHandleMap &in_vars,
+               const VariableHandleMap &out_vars) {
+    for (auto &v : in_vars) {
+      for (auto &vv : v.second) {
+        if (!vars_.count(vv->Name())) {
+          vars_[vv->Name()].reset(vv->MutableVar());
+        }
+      }
+    }
+    for (auto &v : out_vars) {
+      for (auto &vv : v.second) {
+        if (!vars_.count(vv->Name())) {
+          vars_[vv->Name()].reset(vv->MutableVar());
+        }
+      }
+    }
+  }
+
+  ~ScopeWrapper() {
+    for (auto &pair : vars_) {
+      pair.second.release();
+    }
+  }
+};
+
 // borrowed from
 // https://stackoverflow.com/questions/874134/find-if-string-ends-with-another-string-in-c
 inline bool ends_with(string const &value, string const &ending) {
@@ -131,7 +159,6 @@ void Tape::Forward() {
     framework::OpRegistry::CreateOp(op_desc)->Run(scope, platform::CPUPlace());
     current_position_++;
   }
-
   VLOG(3) << "Finishing forward -------------------------";
 }
 
@@ -308,7 +335,23 @@ std::string Tape::GraphVizString(bool with_backward) {
   return ss.str();
 }
 
-void RunOperator(const OpHandle &op) {}
+void RunOperator(const std::string &type,
+                 const VariableHandleMap &in_vars,
+                 const VariableHandleMap &out_vars,
+                 const framework::AttributeMap &attrs) {
+  framework::OpDesc op_desc = CreateOpDesc(type, in_vars, out_vars, attrs);
+  ScopeWrapper scope(in_vars, out_vars);
+  framework::OpRegistry::CreateOp(op_desc)->Run(scope, platform::CPUPlace());
+}
+
+void RunOperatorWithKernel(const std::string &type,
+                           const VariableHandleMap &in_vars,
+                           const VariableHandleMap &out_vars,
+                           const framework::AttributeMap &attrs) {
+  Tape temp_tape;
+  temp_tape.AddOp(type, in_vars, out_vars, attrs);
+  temp_tape.Forward();
+}
 
 Tape &get_global_tape() {
   static Tape T;
@@ -316,5 +359,6 @@ Tape &get_global_tape() {
 }
 
 void reset_global_tape() { get_global_tape() = Tape(); }
+
 }  // namespace tape
 }  // namespace paddle
