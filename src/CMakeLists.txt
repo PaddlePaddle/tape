@@ -39,7 +39,7 @@ include_directories(${CMAKE_BINARY_DIR}/third_party/boost/src/extern_boost/boost
 include_directories(${CMAKE_BINARY_DIR}/third_party/eigen3/src/extern_eigen3)
 # hack in paddle/cmake/external/eigen.cmake
 
-cc_library(tape SRCS tape.cc backward.cc variable.cc DEPS ${GLOB_OP_LIB})
+cc_library(tape SRCS variable.cc tape.cc backward.cc DEPS ${GLOB_OP_LIB})
 cc_library(tape_function SRCS function.cc DEPS ${GLOB_OP_LIB} tape)
 
 cc_test(test_tape
