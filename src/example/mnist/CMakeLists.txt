@@ -15,4 +15,4 @@
 
 cc_test(test_mnist
         SRCS test_mnist.cc
-        DEPS tape tape_variable tape_function)
+        DEPS tape tape_function)
