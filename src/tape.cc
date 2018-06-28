@@ -117,14 +117,14 @@ void Tape::AddOp(const string &type,
   PADDLE_ENFORCE(!has_been_backwarded_);
   LOG(INFO) << "AddOp " << to_string(type, in_vars, out_vars, attrs);
   InferShapeAndVarType(type, in_vars, &out_vars, attrs);
-  tape_.emplace_back(type, in_vars, out_vars, attrs);
+  ops_.emplace_back(type, in_vars, out_vars, attrs);
 }
 
 void Tape::Forward() {
   VLOG(3) << "Starting forward -------------------------";
-  while (current_position_ < tape_.size()) {
+  while (current_position_ < ops_.size()) {
     PADDLE_ENFORCE(!has_been_backwarded_);
-    OpHandle &op = tape_[current_position_];
+    OpHandle &op = ops_[current_position_];
     framework::OpDesc op_desc =
         CreateOpDesc(op.type_, op.inputs_, op.outputs_, op.attrs_);
     ScopeWrapper scope(op.inputs_, op.outputs_);
@@ -139,8 +139,8 @@ void Tape::DescMapToVarMap(
     const unordered_map<string, VariableHandle> &name2var,
     const framework::VariableNameMap &variable_name_map,
     VariableHandleMap *vhm,
-    vector<pair<VariableHandle, VariableHandle>> *duplicated_grad,
-    vector<pair<VariableHandle, VariableHandle>> *uninitialized_grad,
+    vector<pair<VariableHandle, VariableHandle>> *dup_grad,
+    vector<pair<VariableHandle, VariableHandle>> *init_grad,
     bool is_output) {
   for (auto &p2a : variable_name_map) {
     for (auto &arg : p2a.second) {
@@ -163,13 +163,13 @@ void Tape::DescMapToVarMap(
           // we want sum duplicated grad to be in-place
           // since sum_op uses X[0] == Out to determine inplace
           // we assign name2var[name]->Grad to be the first element
-          duplicated_grad->emplace_back(name2var.at(name)->Grad(), temp_grad);
+          dup_grad->emplace_back(name2var.at(name)->Grad(), temp_grad);
           (*vhm)[param].emplace_back(temp_grad);
         } else if (!is_output &&
                    !name2var.at(name)
                         ->GradExist()) {  // zero initialize empty grad
           auto var = name2var.at(name);
-          uninitialized_grad->emplace_back(var, var->Grad());
+          init_grad->emplace_back(var, var->Grad());
           (*vhm)[param].push_back(var->Grad());
         } else {
           (*vhm)[param].push_back(name2var.at(name)->Grad());
@@ -190,7 +190,7 @@ void Tape::Backward(VariableHandle target) {
   backward_tape_->AddOp(
       "fill_ones_like", {{"X", {target}}}, {{"Out", {target->Grad()}}}, {});
 
-  for (auto it = tape_.rbegin(); it != tape_.rend(); ++it) {
+  for (auto it = ops_.rbegin(); it != ops_.rend(); ++it) {
     framework::OpDesc op_desc =
         CreateOpDesc(it->type_, it->inputs_, it->outputs_, it->attrs_);
     unordered_map<string, string> grad_to_var;
@@ -213,24 +213,24 @@ void Tape::Backward(VariableHandle target) {
       }
 
       vector<pair<VariableHandle, VariableHandle>>
-          duplicated_grad;  // {grad, grad@temp}
+          dup_grad;  // {grad, grad@temp}
       vector<pair<VariableHandle, VariableHandle>>
-          uninitialized_grad;  // {var, var_grad}
+          init_grad;  // {var, var_grad}
       VariableHandleMap in_vars, out_vars;
       DescMapToVarMap(name2var,
                       op_grad_desc->Inputs(),
                       &in_vars,
-                      &duplicated_grad,
-                      &uninitialized_grad,
+                      &dup_grad,
+                      &init_grad,
                       false);
       DescMapToVarMap(name2var,
                       op_grad_desc->Outputs(),
                       &out_vars,
-                      &duplicated_grad,
-                      &uninitialized_grad,
+                      &dup_grad,
+                      &init_grad,
                       true);
 
-      for (auto &pair : uninitialized_grad) {
+      for (auto &pair : init_grad) {
         backward_tape_->AddOp("fill_zeros_like",
                               {{"X", {pair.first}}},
                               {{"Out", {pair.second}}},
@@ -238,7 +238,7 @@ void Tape::Backward(VariableHandle target) {
       }
       backward_tape_->AddOp(
           op_grad_desc->Type(), in_vars, out_vars, op_grad_desc->GetAttrMap());
-      for (auto &pair : duplicated_grad) {
+      for (auto &pair : dup_grad) {
         backward_tape_->AddOp("sum",
                               {{"X", {pair.first, pair.second}}},
                               {{"Out", {pair.first}}},
@@ -249,6 +249,63 @@ void Tape::Backward(VariableHandle target) {
 
   backward_tape_->Forward();
   has_been_backwarded_ = true;
+}
+
+void GraphVizHelper(std::ostream &ss,
+                    const std::vector<OpHandle> &ops,
+                    bool is_forward) {
+  std::string node_prefix = is_forward ? "_op" : "op_grad";
+  ss << "subgraph cluster_" << std::to_string(is_forward ? 0 : 1) << " {\n";
+  ss << "node [shape=record,style=filled];\n";
+  ss << "style=filled;\n";
+  ss << "color=lightgrey;\n";
+  for (size_t i = 0; i < ops.size(); ++i) {
+    auto &op = ops[i];
+    std::string op_node = node_prefix + std::to_string(i);
+    ss << op_node << " [label=" << op.type_ << ", shape=box]\n";
+  }
+  if (is_forward) {
+    ss << node_prefix + std::to_string(0);
+    for (size_t i = 1; i < ops.size(); ++i) {
+      ss << "->" << node_prefix + std::to_string(i);
+    }
+    ss << "\nlabel=\"forward tape\"";
+  } else {
+    ss << node_prefix + std::to_string(ops.size() - 1);
+    for (int i = ops.size() - 2; i >= 0; --i) {
+      ss << "->" << node_prefix + std::to_string(i);
+    }
+    ss << " [dir=back]\nlabel=\"backward tape\"";
+  }
+  ss << "\n}\n";
+  for (size_t i = 0; i < ops.size(); ++i) {
+    auto &op = ops[i];
+    std::string op_node = node_prefix + std::to_string(i);
+    for (auto &p2a : op.inputs_) {
+      for (auto &arg : p2a.second) {
+        ss << "\"" << arg->Name() << "\" -> " << op_node << "\n";
+      }
+    }
+    for (auto &p2a : op.outputs_) {
+      for (auto &arg : p2a.second) {
+        ss << op_node << " -> \"" << arg->Name() << "\"\n";
+      }
+    }
+  }
+}
+
+std::string Tape::GraphVizString(bool with_backward) {
+  std::stringstream ss;
+
+  ss << "Please copy to http://www.webgraphviz.com/ for better visualization\n";
+  ss << "digraph G {\n";
+  GraphVizHelper(ss, ops_, true);
+  if (with_backward) {
+    GraphVizHelper(ss, backward_tape_->ops_, false);
+  }
+  ss << "}\n";
+
+  return ss.str();
 }
 
 Tape &get_global_tape() {

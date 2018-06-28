@@ -83,6 +83,8 @@ class Tape {
 
   bool HasBeenBackwarded() { return has_been_backwarded_; }
 
+  std::string GraphVizString(bool with_backward = true);
+
  private:
   /*
    * Construct vhm based on name2var, variable_name_map
@@ -90,20 +92,18 @@ class Tape {
    * During the construction, record duplicated gradient and
    * uninitialzied gradient.
    */
-  using std::vector;
-  using std::pair;
   void DescMapToVarMap(
       const std::unordered_map<std::string, VariableHandle> &name2var,
       const framework::VariableNameMap &variable_name_map,
       VariableHandleMap *vhm,
-      vector<pair<VariableHandle, VariableHandle>> *duplicated_grad,
-      vector<pair<VariableHandle, VariableHandle>> *uninitialized_grad,
+      std::vector<std::pair<VariableHandle, VariableHandle>> *dup_grad,
+      std::vector<std::pair<VariableHandle, VariableHandle>> *init_grad,
       bool is_output);
 
   bool has_been_backwarded_ = false;
   size_t current_position_ = 0;
 
-  std::vector<OpHandle> tape_;
+  std::vector<OpHandle> ops_;
   std::shared_ptr<Tape> backward_tape_;
 };
 
