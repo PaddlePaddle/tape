@@ -25,7 +25,6 @@
 #include "paddle/fluid/framework/reader.h"
 #include "paddle/fluid/framework/type_defs.h"
 #include "src/tape.h"
-#include "src/variable.h"
 
 namespace paddle {
 namespace tape {
