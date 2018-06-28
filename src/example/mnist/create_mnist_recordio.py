@@ -18,7 +18,7 @@ import paddle.v2.dataset.mnist as mnist
 
 
 def create_mnist_recordio_files():
-    # Convert mnist to recordio file
+    # Convert mnist training set to recordio files
     with fluid.program_guard(fluid.Program(), fluid.Program()):
         reader = paddle.batch(mnist.train(), batch_size=32)
         feeder = fluid.DataFeeder(
@@ -30,7 +30,21 @@ def create_mnist_recordio_files():
             ],
             place=fluid.CPUPlace())
         fluid.recordio_writer.convert_reader_to_recordio_file(
-            '/tmp/mnist.recordio', reader, feeder)
+            '/tmp/mnist_train.recordio', reader, feeder)
+
+    # Convert mnist testing set to recordio files
+    with fluid.program_guard(fluid.Program(), fluid.Program()):
+        reader = paddle.batch(mnist.test(), batch_size=32)
+        feeder = fluid.DataFeeder(
+            feed_list=[  # order is image and label
+                fluid.layers.data(
+                    name='image', shape=[1, 28, 28], dtype='float32'),
+                fluid.layers.data(
+                    name='label', shape=[1], dtype='int64'),
+            ],
+            place=fluid.CPUPlace())
+        fluid.recordio_writer.convert_reader_to_recordio_file(
+            '/tmp/mnist_test.recordio', reader, feeder)
 
 
 if __name__ == "__main__":
