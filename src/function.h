@@ -71,14 +71,14 @@ class Linear {
     attrs["min"] = -limit;
     attrs["max"] = limit;
     attrs["seed"] = RandomSeed::GetRandomSeed();
-    w_ = ParameterCollectionInstance().AddParameter(
+    w_ = GlobalParameterCollection().AddParameter(
         "LinearWeight", "uniform_random", attrs);
 
     // Use fill zero to initialize Bias
     attrs["dtype"] = paddle::framework::proto::VarType::Type::VarType_Type_FP32;
     attrs["shape"] = std::vector<int>{out_dim};
     attrs["value"] = 0.0f;
-    b_ = ParameterCollectionInstance().AddParameter(
+    b_ = GlobalParameterCollection().AddParameter(
         "LinearBias", "fill_constant", attrs);
   }
 
@@ -124,13 +124,13 @@ class Convolution2D {
     attrs["min"] = -limit;
     attrs["max"] = limit;
     attrs["seed"] = RandomSeed::GetRandomSeed();
-    w_ = ParameterCollectionInstance().AddParameter(
+    w_ = GlobalParameterCollection().AddParameter(
         "ConvolutionWeight", "uniform_random", attrs);
 
     // Use fill zero to initialize Bias
     attrs["shape"] = std::vector<int>{c_out};
     attrs["value"] = 0.0f;
-    b_ = ParameterCollectionInstance().AddParameter(
+    b_ = GlobalParameterCollection().AddParameter(
         "ConvolutionBias", "fill_constant", attrs);
   }
 
@@ -268,16 +268,16 @@ class BatchNorm {
     framework::AttributeMap attrs;
     attrs["shape"] = std::vector<int>{channel_in};
     attrs["value"] = 1.0f;
-    scale_ = ParameterCollectionInstance().AddBNParameter(
+    scale_ = GlobalParameterCollection().AddBNParameter(
         "BatchNormScale", "fill_constant", attrs);
-    variance_ = ParameterCollectionInstance().AddBNParameter(
+    variance_ = GlobalParameterCollection().AddBNParameter(
         "BatchNormVariance", "fill_constant", attrs);
 
     // Use fill zero to initialize bias and mean
     attrs["value"] = 0.0f;
-    bias_ = ParameterCollectionInstance().AddBNParameter(
+    bias_ = GlobalParameterCollection().AddBNParameter(
         "BatchNormBias", "fill_constant", attrs);
-    mean_ = ParameterCollectionInstance().AddBNParameter(
+    mean_ = GlobalParameterCollection().AddBNParameter(
         "BatchNormMean", "fill_constant", attrs);
   }
 

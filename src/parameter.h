@@ -53,7 +53,7 @@ class ParameterCollection {
   std::vector<ParameterHandle> batch_norm_params_;
 };
 
-ParameterCollection &ParameterCollectionInstance();
+ParameterCollection &GlobalParameterCollection();
 std::vector<ParameterHandle> OptimizableParameters();
 
 }  // namespace tape

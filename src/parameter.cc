@@ -56,13 +56,13 @@ std::vector<ParameterHandle> ParameterCollection::OptimizableParameters() {
   return optimizable_params_;
 }
 
-ParameterCollection &ParameterCollectionInstance() {
+ParameterCollection &GlobalParameterCollection() {
   static ParameterCollection pc;
   return pc;
 }
 
 std::vector<ParameterHandle> OptimizableParameters() {
-  return ParameterCollectionInstance().OptimizableParameters();
+  return GlobalParameterCollection().OptimizableParameters();
 }
 
 }  // namespace tape
