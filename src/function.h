@@ -24,6 +24,8 @@
 #include "paddle/fluid/framework/op_registry.h"
 #include "paddle/fluid/framework/reader.h"
 #include "paddle/fluid/framework/type_defs.h"
+
+#include "src/parameter.h"
 #include "src/tape.h"
 
 namespace paddle {
@@ -58,23 +60,9 @@ class Fill {
   const framework::AttributeMap attrs_;
 };
 
-void init_params(VariableHandle v,
-                 const std::string &initializer,
-                 const framework::AttributeMap &attrs) {
-  if (initializer == "fill_constant") {
-    // fill_constant is not OperatorWithKernel, so we can't add it to the tape
-    RunOperator(initializer, {}, {{"Out", {v}}}, attrs);
-  } else {
-    RunOperatorWithKernel(initializer, {}, {{"Out", {v}}}, attrs);
-  }
-}
-
 class Linear {
  public:
-  Linear(int in_dim, int out_dim, const std::string &act = "")
-      : w_(new Variable("LinearWeight")),
-        b_(new Variable("LinearBias")),
-        act_(act) {
+  Linear(int in_dim, int out_dim, const std::string &act = "") : act_(act) {
     // Use Xavier to initialize Weight
     float limit = sqrt(6.0 / static_cast<float>(in_dim + out_dim));
     framework::AttributeMap attrs;
@@ -83,13 +71,15 @@ class Linear {
     attrs["min"] = -limit;
     attrs["max"] = limit;
     attrs["seed"] = RandomSeed::GetRandomSeed();
-    init_params(w_, "uniform_random", attrs);
+    w_ = GlobalParameterCollection().AddParameter(
+        "LinearWeight", "uniform_random", attrs);
 
     // Use fill zero to initialize Bias
     attrs["dtype"] = paddle::framework::proto::VarType::Type::VarType_Type_FP32;
     attrs["shape"] = std::vector<int>{out_dim};
     attrs["value"] = 0.0f;
-    init_params(b_, "fill_constant", attrs);
+    b_ = GlobalParameterCollection().AddParameter(
+        "LinearBias", "fill_constant", attrs);
   }
 
   VariableHandle operator()(VariableHandle input,
@@ -117,33 +107,31 @@ class Linear {
   std::vector<VariableHandle> Params() { return {w_, b_}; }
 
  private:
-  VariableHandle w_;
-  VariableHandle b_;
+  ParameterHandle w_;
+  ParameterHandle b_;
   std::string act_;
 };
 
 class Convolution2D {
  public:
   Convolution2D(int c_in, int c_out, int f_size, const std::string &act = "")
-      : w_(new Variable("ConvolutionWeight")),
-        b_(new Variable("ConvolutionBias")),
-        act_(act) {
+      : act_(act) {
     // Use Xavier to initialize Weight
     float fan_in = c_in * f_size * f_size, fan_out = c_out * f_size * f_size;
     float limit = sqrt(6.0 / (fan_in + fan_out));
     framework::AttributeMap attrs;
     attrs["shape"] = std::vector<int>{c_out, c_in, f_size, f_size};
-    attrs["dtype"] = paddle::framework::proto::VarType::Type::VarType_Type_FP32;
     attrs["min"] = -limit;
     attrs["max"] = limit;
     attrs["seed"] = RandomSeed::GetRandomSeed();
-    init_params(w_, "uniform_random", attrs);
+    w_ = GlobalParameterCollection().AddParameter(
+        "ConvolutionWeight", "uniform_random", attrs);
 
     // Use fill zero to initialize Bias
-    attrs["dtype"] = paddle::framework::proto::VarType::Type::VarType_Type_FP32;
     attrs["shape"] = std::vector<int>{c_out};
     attrs["value"] = 0.0f;
-    init_params(b_, "fill_constant", attrs);
+    b_ = GlobalParameterCollection().AddParameter(
+        "ConvolutionBias", "fill_constant", attrs);
   }
 
   VariableHandle operator()(
@@ -173,8 +161,8 @@ class Convolution2D {
   std::vector<VariableHandle> Params() { return {w_, b_}; }
 
  private:
-  VariableHandle w_;
-  VariableHandle b_;
+  ParameterHandle w_;
+  ParameterHandle b_;
   std::string act_;
 };
 
@@ -183,23 +171,20 @@ class SGD {
   explicit SGD(float learning_rate) : learning_rate_(new Variable("sgd")) {
     std::string initializer = "fill_constant";
     framework::AttributeMap attrs;
-    attrs["dtype"] = paddle::framework::proto::VarType::Type::VarType_Type_FP32;
     attrs["shape"] = std::vector<int>{1};
     attrs["value"] = learning_rate;
-    init_params(learning_rate_, initializer, attrs);
+    RunOperator("fill_constant", {}, {{"Out", {learning_rate_}}}, attrs);
   }
 
   void Update(VariableHandle input) {
     PADDLE_ENFORCE(get_global_tape().HasBeenBackwarded(),
                    "optimization must happen after the backward");
-    Tape temp_tape;
-    temp_tape.AddOp("sgd",
-                    {{"Param", {input}},
-                     {"LearningRate", {learning_rate_}},
-                     {"Grad", {input->Grad()}}},
-                    {{"ParamOut", {input}}},
-                    {});
-    temp_tape.Forward();
+    RunOperatorWithKernel("sgd",
+                          {{"Param", {input}},
+                           {"LearningRate", {learning_rate_}},
+                           {"Grad", {input->Grad()}}},
+                          {{"ParamOut", {input}}},
+                          {});
   }
 
  private:
@@ -212,10 +197,9 @@ class Adam {
       : learning_rate_(new Variable("adam")), beta1_(beta1), beta2_(beta2) {
     std::string initializer = "fill_constant";
     framework::AttributeMap attrs;
-    attrs["dtype"] = paddle::framework::proto::VarType::Type::VarType_Type_FP32;
     attrs["shape"] = std::vector<int>{1};
     attrs["value"] = learning_rate;
-    init_params(learning_rate_, initializer, attrs);
+    RunOperator("fill_constant", {}, {{"Out", {learning_rate_}}}, attrs);
   }
 
   void Update(VariableHandle input) {
@@ -225,22 +209,20 @@ class Adam {
     // initialize states if they haven't been created
     if (hyperparams->empty()) {
       framework::AttributeMap attrs;
-      attrs["dtype"] =
-          paddle::framework::proto::VarType::Type::VarType_Type_FP32;
       attrs["shape"] = paddle::framework::vectorize2int(
           input->Get<paddle::framework::LoDTensor>().dims());
       attrs["value"] = 0.0f;
       VariableHandle moment1(new Variable("adam"));
       VariableHandle moment2(new Variable("adam"));
-      init_params(moment1, "fill_constant", attrs);
-      init_params(moment2, "fill_constant", attrs);
+      RunOperator("fill_constant", {}, {{"Out", {moment1}}}, attrs);
+      RunOperator("fill_constant", {}, {{"Out", {moment2}}}, attrs);
 
       attrs["shape"] = std::vector<int>{1};
       attrs["value"] = 1.0f;
       VariableHandle beta1_pow(new Variable("adam"));
       VariableHandle beta2_pow(new Variable("adam"));
-      init_params(beta1_pow, "fill_constant", attrs);
-      init_params(beta2_pow, "fill_constant", attrs);
+      RunOperator("fill_constant", {}, {{"Out", {beta1_pow}}}, attrs);
+      RunOperator("fill_constant", {}, {{"Out", {beta2_pow}}}, attrs);
 
       hyperparams->emplace_back(moment1);
       hyperparams->emplace_back(moment2);
@@ -260,20 +242,18 @@ class Adam {
     beta2_pow->GetMutable<paddle::framework::LoDTensor>()->data<float>()[0] *=
         beta2_;
 
-    Tape temp_tape;
-    temp_tape.AddOp("adam",
-                    {{"Param", {input}},
-                     {"LearningRate", {learning_rate_}},
-                     {"Grad", {input->Grad()}},
-                     {"Moment1", {moment1}},
-                     {"Moment2", {moment2}},
-                     {"Beta1Pow", {beta1_pow}},
-                     {"Beta2Pow", {beta2_pow}}},
-                    {{"ParamOut", {input}},
-                     {"Moment1Out", {moment1}},
-                     {"Moment2Out", {moment2}}},
-                    {{"beta1", beta1_}, {"beta2", beta2_}});
-    temp_tape.Forward();
+    RunOperatorWithKernel("adam",
+                          {{"Param", {input}},
+                           {"LearningRate", {learning_rate_}},
+                           {"Grad", {input->Grad()}},
+                           {"Moment1", {moment1}},
+                           {"Moment2", {moment2}},
+                           {"Beta1Pow", {beta1_pow}},
+                           {"Beta2Pow", {beta2_pow}}},
+                          {{"ParamOut", {input}},
+                           {"Moment1Out", {moment1}},
+                           {"Moment2Out", {moment2}}},
+                          {{"beta1", beta1_}, {"beta2", beta2_}});
   }
 
  private:
@@ -284,24 +264,22 @@ class Adam {
 
 class BatchNorm {
  public:
-  explicit BatchNorm(int channel_in, const std::string &act = "")
-      : scale_(new Variable("BatchNormScale")),
-        bias_(new Variable("BatchNormBias")),
-        mean_(new Variable("BatchNormMean")),
-        variance_(new Variable("BatchNormVariance")),
-        act_(act) {
+  explicit BatchNorm(int channel_in, const std::string &act = "") : act_(act) {
     // Use fill one to initialize scale and variance
     framework::AttributeMap attrs;
-    attrs["dtype"] = paddle::framework::proto::VarType::Type::VarType_Type_FP32;
     attrs["shape"] = std::vector<int>{channel_in};
     attrs["value"] = 1.0f;
-    init_params(scale_, "fill_constant", attrs);
-    init_params(variance_, "fill_constant", attrs);
+    scale_ = GlobalParameterCollection().AddParameter(
+        "BatchNormScale", "fill_constant", attrs);
+    variance_ = GlobalParameterCollection().AddBNParameter(
+        "BatchNormVariance", "fill_constant", attrs);
 
     // Use fill zero to initialize bias and mean
     attrs["value"] = 0.0f;
-    init_params(bias_, "fill_constant", attrs);
-    init_params(mean_, "fill_constant", attrs);
+    bias_ = GlobalParameterCollection().AddParameter(
+        "BatchNormBias", "fill_constant", attrs);
+    mean_ = GlobalParameterCollection().AddBNParameter(
+        "BatchNormMean", "fill_constant", attrs);
   }
 
   VariableHandle operator()(VariableHandle x,
@@ -334,10 +312,10 @@ class BatchNorm {
   std::vector<VariableHandle> Params() { return {scale_, bias_}; }
 
  private:
-  VariableHandle scale_;
-  VariableHandle bias_;
-  VariableHandle mean_;
-  VariableHandle variance_;
+  ParameterHandle scale_;
+  ParameterHandle bias_;
+  ParameterHandle mean_;
+  ParameterHandle variance_;
   std::string act_;
 };
 

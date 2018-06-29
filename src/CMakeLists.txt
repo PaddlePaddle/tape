@@ -40,8 +40,12 @@ include_directories(${CMAKE_BINARY_DIR}/third_party/eigen3/src/extern_eigen3)
 # hack in paddle/cmake/external/eigen.cmake
 
 cc_library(tape SRCS variable.cc tape.cc backward.cc DEPS ${GLOB_OP_LIB})
-cc_library(tape_function SRCS function.cc DEPS ${GLOB_OP_LIB} tape)
+cc_library(tape_parameter SRCS parameter.cc DEPS tape)
+cc_library(tape_function SRCS function.cc DEPS ${GLOB_OP_LIB} tape tape_parameter)
 
+cc_test(test_parameter
+        SRCS test_parameter.cc
+        DEPS tape_parameter)
 cc_test(test_tape
         SRCS test_tape.cc
         DEPS tape tape_function)
