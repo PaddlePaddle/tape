@@ -176,11 +176,11 @@ int main(int argc, char** argv) {
   std::vector<paddle::platform::Place> places;
 
   places.emplace_back(paddle::platform::CPUPlace());
-  //  int count = paddle::platform::GetCUDADeviceCount();
-  //  for (int i = 0; i < count; ++i) {
-  //    places.emplace_back(paddle::platform::CUDAPlace(i));
-  //  }
-  //  LOG(INFO) << "DeviceCount " << count;
+  int count = paddle::platform::GetCUDADeviceCount();
+  for (int i = 0; i < count; ++i) {
+    places.emplace_back(paddle::platform::CUDAPlace(i));
+  }
+  LOG(INFO) << "DeviceCount " << count;
   paddle::platform::DeviceContextPool::Init(places);
 
   testing::InitGoogleTest(&argc, argv);

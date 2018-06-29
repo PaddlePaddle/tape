@@ -29,6 +29,13 @@ if(OPENMP_FOUND)
     set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
 endif()
 
+# Include cuda and cudnn
+if(WITH_GPU)
+    add_definitions(-DPADDLE_WITH_CUDA)
+    include_directories(${CUDNN_INCLUDE_DIR})
+    include_directories(${CUDA_TOOLKIT_INCLUDE})
+endif()
+
 include_directories(${CMAKE_SOURCE_DIR}/paddle) # for header files in paddle/
 include_directories(${CMAKE_BINARY_DIR}/paddle) # for *.pb.h
 include_directories(${CMAKE_BINARY_DIR}/third_party/install/glog/include)
