@@ -13,5 +13,6 @@
 # limitations under the License.
 #
 
-add_subdirectory(mnist)
-add_subdirectory(cifar)
+cc_test(test_cifar
+        SRCS test_cifar.cc
+        DEPS tape tape_function)

@@ -124,15 +124,15 @@ class Linear {
 
 class Convolution2D {
  public:
-  Convolution2D(int c_in, int c_out, int f, const std::string &act = "")
+  Convolution2D(int c_in, int c_out, int f_size, const std::string &act = "")
       : w_(new Variable("ConvolutionWeight")),
         b_(new Variable("ConvolutionBias")),
         act_(act) {
     // Use Xavier to initialize Weight
-    float fan_in = c_in * f * f, fan_out = c_out * f * f;
+    float fan_in = c_in * f_size * f_size, fan_out = c_out * f_size * f_size;
     float limit = sqrt(6.0 / (fan_in + fan_out));
     framework::AttributeMap attrs;
-    attrs["shape"] = std::vector<int>{c_out, c_in, f, f};
+    attrs["shape"] = std::vector<int>{c_out, c_in, f_size, f_size};
     attrs["dtype"] = paddle::framework::proto::VarType::Type::VarType_Type_FP32;
     attrs["min"] = -limit;
     attrs["max"] = limit;
@@ -148,7 +148,8 @@ class Convolution2D {
 
   VariableHandle operator()(
       VariableHandle input,
-      const framework::AttributeMap &conv_op_attrs = {},
+      const framework::AttributeMap &conv_op_attrs = {{"paddings",
+                                                       std::vector<int>{1, 1}}},
       const framework::AttributeMap &add_op_attrs = {{"axis", 1}}) {
     VariableHandle pre_bias(new Variable("conv"));
     get_global_tape().AddOp("conv2d",
@@ -364,7 +365,8 @@ VariableHandle accuracy(VariableHandle prediction,
 }
 
 VariableHandle pool2d(VariableHandle x,
-                      const framework::AttributeMap &attrs = {}) {
+                      const framework::AttributeMap &attrs = {
+                          {"strides", std::vector<int>{2, 2}}}) {
   VariableHandle out(new Variable("pool2d"));
   get_global_tape().AddOp("pool2d", {{"X", {x}}}, {{"Out", {out}}}, attrs);
   return out;

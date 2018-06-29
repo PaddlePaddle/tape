@@ -143,7 +143,7 @@ void Tape::AddOp(const string &type,
                  const VariableHandleMap &out_vars,
                  const framework::AttributeMap &attrs) {
   PADDLE_ENFORCE(!has_been_backwarded_);
-  LOG(INFO) << "AddOp " << to_string(type, in_vars, out_vars, attrs);
+  VLOG(3) << "AddOp " << to_string(type, in_vars, out_vars, attrs);
   InferShapeAndVarType(type, in_vars, out_vars, attrs);
   ops_.emplace_back(type, in_vars, out_vars, attrs);
 }
@@ -156,7 +156,7 @@ void Tape::Forward() {
     framework::OpDesc op_desc =
         CreateOpDesc(op.type_, op.inputs_, op.outputs_, op.attrs_);
     ScopeWrapper scope(op.inputs_, op.outputs_);
-    framework::OpRegistry::CreateOp(op_desc)->Run(scope, platform::CPUPlace());
+    framework::OpRegistry::CreateOp(op_desc)->Run(scope, place_);
     current_position_++;
   }
   VLOG(3) << "Finishing forward -------------------------";
@@ -341,7 +341,8 @@ void RunOperator(const std::string &type,
                  const framework::AttributeMap &attrs) {
   framework::OpDesc op_desc = CreateOpDesc(type, in_vars, out_vars, attrs);
   ScopeWrapper scope(in_vars, out_vars);
-  framework::OpRegistry::CreateOp(op_desc)->Run(scope, platform::CPUPlace());
+  framework::OpRegistry::CreateOp(op_desc)->Run(scope,
+                                                get_global_tape().Place());
 }
 
 void RunOperatorWithKernel(const std::string &type,
@@ -358,7 +359,9 @@ Tape &get_global_tape() {
   return T;
 }
 
-void reset_global_tape() { get_global_tape() = Tape(); }
+void reset_global_tape(const platform::Place &place) {
+  get_global_tape() = Tape(place);
+}
 
 }  // namespace tape
 }  // namespace paddle
