@@ -143,7 +143,7 @@ void Tape::AddOp(const string &type,
                  const VariableHandleMap &out_vars,
                  const framework::AttributeMap &attrs) {
   PADDLE_ENFORCE(!has_been_backwarded_);
-  LOG(INFO) << "AddOp " << to_string(type, in_vars, out_vars, attrs);
+  VLOG(6) << "AddOp " << to_string(type, in_vars, out_vars, attrs);
   InferShapeAndVarType(type, in_vars, out_vars, attrs);
   ops_.emplace_back(type, in_vars, out_vars, attrs);
 }

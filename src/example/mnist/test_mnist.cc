@@ -28,6 +28,7 @@ using paddle::tape::softmax;
 using paddle::tape::cross_entropy;
 using paddle::tape::reset_global_tape;
 using paddle::tape::get_global_tape;
+using paddle::tape::OptimizableParameters;
 
 using paddle::tape::CreateRecordioFileReader;
 using paddle::tape::ReadNext;
@@ -65,13 +66,7 @@ TEST(Mnist, TestCPU) {
 
     get_global_tape().Backward(loss);
 
-    for (auto w : linear1.Params()) {
-      adam.Update(w);
-    }
-    for (auto w : linear2.Params()) {
-      adam.Update(w);
-    }
-    for (auto w : linear3.Params()) {
+    for (auto w : OptimizableParameters()) {
       adam.Update(w);
     }
 
