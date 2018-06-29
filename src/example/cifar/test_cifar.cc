@@ -32,6 +32,7 @@ using paddle::tape::softmax;
 using paddle::tape::cross_entropy;
 using paddle::tape::reset_global_tape;
 using paddle::tape::get_global_tape;
+using paddle::tape::OptimizableParameters;
 
 using paddle::tape::CreateRecordioFileReader;
 using paddle::tape::ReadNext;
@@ -105,7 +106,7 @@ TEST(Cifar, TestCPU) {
   for (int i = 0; i < total_steps; ++i) {
     LOG(INFO) << "Train step #" << i;
 
-    reset_global_tape(paddle::platform::CUDAPlace(0));
+    reset_global_tape();
     auto data_label = ReadNext(train_reader, true);
     auto data = data_label[0];
     auto label = data_label[1];
@@ -117,52 +118,7 @@ TEST(Cifar, TestCPU) {
     get_global_tape().Backward(loss);
 
     // Update all parameters
-    for (auto w : conv1_1.Params()) {
-      adam.Update(w);
-    }
-    for (auto w : conv1_2.Params()) {
-      adam.Update(w);
-    }
-    for (auto w : conv2_1.Params()) {
-      adam.Update(w);
-    }
-    for (auto w : conv2_2.Params()) {
-      adam.Update(w);
-    }
-    for (auto w : conv3_1.Params()) {
-      adam.Update(w);
-    }
-    for (auto w : conv3_2.Params()) {
-      adam.Update(w);
-    }
-    for (auto w : conv3_3.Params()) {
-      adam.Update(w);
-    }
-    for (auto w : conv4_1.Params()) {
-      adam.Update(w);
-    }
-    for (auto w : conv4_2.Params()) {
-      adam.Update(w);
-    }
-    for (auto w : conv4_3.Params()) {
-      adam.Update(w);
-    }
-    for (auto w : conv5_1.Params()) {
-      adam.Update(w);
-    }
-    for (auto w : conv5_2.Params()) {
-      adam.Update(w);
-    }
-    for (auto w : conv5_3.Params()) {
-      adam.Update(w);
-    }
-    for (auto w : fc1.Params()) {
-      adam.Update(w);
-    }
-    for (auto w : fc2.Params()) {
-      adam.Update(w);
-    }
-    for (auto w : fc3.Params()) {
+    for (auto w : OptimizableParameters()) {
       adam.Update(w);
     }
 
@@ -176,7 +132,7 @@ TEST(Cifar, TestCPU) {
       for (int i = 0; i < test_steps; ++i) {
         LOG(INFO) << "Test step #" << i;
 
-        reset_global_tape(paddle::platform::CUDAPlace(0));
+        reset_global_tape();
 
         auto data_label = ReadNext(test_reader, false);
         if (data_label.empty()) {
@@ -220,12 +176,11 @@ int main(int argc, char** argv) {
   std::vector<paddle::platform::Place> places;
 
   places.emplace_back(paddle::platform::CPUPlace());
-  int count = paddle::platform::GetCUDADeviceCount();
-  for (int i = 0; i < count; ++i) {
-    places.emplace_back(paddle::platform::CUDAPlace(i));
-  }
-
-  LOG(INFO) << "DeviceCount " << count;
+  //  int count = paddle::platform::GetCUDADeviceCount();
+  //  for (int i = 0; i < count; ++i) {
+  //    places.emplace_back(paddle::platform::CUDAPlace(i));
+  //  }
+  //  LOG(INFO) << "DeviceCount " << count;
   paddle::platform::DeviceContextPool::Init(places);
 
   testing::InitGoogleTest(&argc, argv);
