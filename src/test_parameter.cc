@@ -31,10 +31,21 @@ TEST(ParameterCollection, TestAddParameter) {
   }
 }
 
-TEST(ParameterCollection, TestAddBNParameter) {
+TEST(ParameterCollection, TestSaveAllParameters) {
+  std::string file_path = "/tmp/test_parameter_save/";
   ParameterCollection pc;
-  pc.AddBNParameter("w", "fill_constant", {{"shape", std::vector<int>{3}}});
-  PADDLE_ENFORCE(pc.OptimizableParameters().empty());
+  pc.AddParameter("w", "fill_constant", {{"shape", std::vector<int>{3}}});
+  pc.SaveAllParameters(file_path);
+
+  ParameterCollection loaded_pc(file_path);
+  PADDLE_ENFORCE_EQ(loaded_pc.OptimizableParameters().size(), 1);
+  auto param = loaded_pc.OptimizableParameters()[0];
+  for (int i = 0; i < 3; ++i) {
+    PADDLE_ENFORCE_EQ(
+        param->Get<paddle::framework::LoDTensor>().data<float>()[i], 0.0);
+  }
+
+  PADDLE_ENFORCE_EQ(system(std::string("rm -r " + file_path).c_str()), 0);
 }
 
 int main(int argc, char** argv) {

@@ -268,17 +268,20 @@ class BatchNorm {
     framework::AttributeMap attrs;
     attrs["shape"] = std::vector<int>{channel_in};
     attrs["value"] = 1.0f;
-    scale_ = GlobalParameterCollection().AddBNParameter(
+    scale_ = GlobalParameterCollection().AddParameter(
         "BatchNormScale", "fill_constant", attrs);
-    variance_ = GlobalParameterCollection().AddBNParameter(
+    variance_ = GlobalParameterCollection().AddParameter(
         "BatchNormVariance", "fill_constant", attrs);
 
     // Use fill zero to initialize bias and mean
     attrs["value"] = 0.0f;
-    bias_ = GlobalParameterCollection().AddBNParameter(
+    bias_ = GlobalParameterCollection().AddParameter(
         "BatchNormBias", "fill_constant", attrs);
-    mean_ = GlobalParameterCollection().AddBNParameter(
+    mean_ = GlobalParameterCollection().AddParameter(
         "BatchNormMean", "fill_constant", attrs);
+
+    GlobalParameterCollection().MarkNoGrad(variance_->Name());
+    GlobalParameterCollection().MarkNoGrad(mean_->Name());
   }
 
   VariableHandle operator()(VariableHandle x,
