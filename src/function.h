@@ -24,6 +24,7 @@
 #include "paddle/fluid/framework/op_registry.h"
 #include "paddle/fluid/framework/reader.h"
 #include "paddle/fluid/framework/type_defs.h"
+#include "paddle/fluid/platform/place.h"
 
 #include "src/parameter.h"
 #include "src/tape.h"
@@ -240,12 +241,16 @@ class Adam {
     auto beta1_pow = hyperparams->at(2);
     auto beta2_pow = hyperparams->at(3);
 
-    //    beta1_pow->GetMutable<paddle::framework::LoDTensor>()->data<float>()[0]
-    //    *=
-    //        beta1_;
-    //    beta2_pow->GetMutable<paddle::framework::LoDTensor>()->data<float>()[0]
-    //    *=
-    //        beta2_;
+    framework::AttributeMap attrs;
+    attrs["shape"] = std::vector<int>{1};
+    attrs["value"] =
+        beta1_pow->FetchValue()->Get<framework::LoDTensor>().data<float>()[0] *
+        beta1_;
+    RunOperator("fill_constant", {}, {{"Out", {beta1_pow}}}, attrs);
+    attrs["value"] =
+        beta2_pow->FetchValue()->Get<framework::LoDTensor>().data<float>()[0] *
+        beta2_;
+    RunOperator("fill_constant", {}, {{"Out", {beta2_pow}}}, attrs);
 
     RunOperatorWithKernel("adam",
                           {{"Param", {input}},

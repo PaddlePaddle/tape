@@ -37,9 +37,11 @@ std::ostream& operator<<(std::ostream& os, const Variable& var) {
   return os;
 }
 
-VariableHandle Variable::CopyToCPU() const {
+VariableHandle Variable::FetchValue() {
+  get_global_tape().Forward();
   auto place = this->Get<framework::LoDTensor>().place();
   auto context = platform::DeviceContextPool::Instance().Get(place);
+  context->Wait();
   VariableHandle cpu_copy(new Variable("temp"));
   framework::TensorCopy(this->Get<framework::LoDTensor>(),
                         platform::CPUPlace(),
@@ -52,10 +54,8 @@ VariableHandle Variable::CopyToCPU() const {
 const Variable& Variable::Value() {
   get_global_tape().Forward();
   auto place = this->Get<framework::LoDTensor>().place();
-  PADDLE_ENFORCE(platform::is_same_place(place, get_global_tape().Place()),
-                 "Data place should match tape place");
   if (platform::is_gpu_place(place)) {
-    auto context = platform::DeviceContextPool::Instance().Get(place);
+    auto* context = platform::DeviceContextPool::Instance().Get(place);
     context->Wait();
   }
   return *this;

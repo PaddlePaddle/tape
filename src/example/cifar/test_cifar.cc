@@ -87,7 +87,7 @@ TEST(Cifar, TestCPU) {
   Linear fc2(512, 512, "relu");
   Linear fc3(512, 10, "softmax");
 
-  SGD adam(0.001);
+  Adam adam(0.001);
 
   auto vgg16_forward = [&](VariableHandle input) -> VariableHandle {
     auto pool1 = pool2d(conv1_2(conv1_1(input)));
@@ -117,9 +117,7 @@ TEST(Cifar, TestCPU) {
     auto loss = mean(cross_entropy(predict, label));
     auto precision = accuracy(predict, label);
 
-    LOG(INFO) << "Before forward";
     LOG(INFO) << loss->Value();
-    LOG(INFO) << "After forward";
 
     LOG(INFO) << "Before backward";
     get_global_tape().Backward(loss);
@@ -159,12 +157,10 @@ TEST(Cifar, TestCPU) {
 
         get_global_tape().Forward();
 
-        losses.push_back(loss->Value()
-                             .CopyToCPU()
+        losses.push_back(loss->FetchValue()
                              ->Get<paddle::framework::LoDTensor>()
                              .data<float>()[0]);
-        accuracies.push_back(precision->Value()
-                                 .CopyToCPU()
+        accuracies.push_back(precision->FetchValue()
                                  ->Get<paddle::framework::LoDTensor>()
                                  .data<float>()[0]);
       }
