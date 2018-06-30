@@ -45,17 +45,6 @@ ParameterHandle ParameterCollection::AddParameter(
   return param;
 }
 
-// ParameterHandle ParameterCollection::AddBNParameter(
-//    const std::string &name,
-//    const std::string &initializer,
-//    const framework::AttributeMap &attrs) {
-//  ParameterHandle param(new Parameter(name));
-//  InitParameter(param, initializer, attrs);
-//  batch_norm_params_[param->Name()] = param;
-//
-//  return param;
-//}
-
 std::vector<ParameterHandle> ParameterCollection::OptimizableParameters() {
   std::vector<ParameterHandle> rval;
   for (auto &pair : params_) {
