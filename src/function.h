@@ -137,7 +137,10 @@ class Convolution2D {
   VariableHandle operator()(
       VariableHandle input,
       const framework::AttributeMap &conv_op_attrs = {{"paddings",
-                                                       std::vector<int>{1, 1}}},
+                                                       std::vector<int>{1, 1}},
+                                                      {"use_cudnn", true},
+                                                      {"workspace_size_MB",
+                                                       2048}},
       const framework::AttributeMap &add_op_attrs = {{"axis", 1}}) {
     VariableHandle pre_bias(new Variable("conv"));
     get_global_tape().AddOp("conv2d",
@@ -237,10 +240,12 @@ class Adam {
     auto beta1_pow = hyperparams->at(2);
     auto beta2_pow = hyperparams->at(3);
 
-    beta1_pow->GetMutable<paddle::framework::LoDTensor>()->data<float>()[0] *=
-        beta1_;
-    beta2_pow->GetMutable<paddle::framework::LoDTensor>()->data<float>()[0] *=
-        beta2_;
+    //    beta1_pow->GetMutable<paddle::framework::LoDTensor>()->data<float>()[0]
+    //    *=
+    //        beta1_;
+    //    beta2_pow->GetMutable<paddle::framework::LoDTensor>()->data<float>()[0]
+    //    *=
+    //        beta2_;
 
     RunOperatorWithKernel("adam",
                           {{"Param", {input}},
@@ -396,9 +401,10 @@ VariableHandle CreateRecordioFileReader(std::string filename,
                                         std::vector<int> ranks,
                                         std::vector<int> lod_levels) {
   std::ifstream infile(filename);
-  PADDLE_ENFORCE(infile.good(),
-                 "%s doesn't exist; have you run create_mnist_recordio.py?",
-                 filename);
+  PADDLE_ENFORCE(
+      infile.good(),
+      "%s doesn't exist; have you run the corresponding create_recordio.py?",
+      filename);
 
   VariableHandle reader(new paddle::tape::Variable("reader"));
 

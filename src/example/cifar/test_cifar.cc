@@ -38,12 +38,12 @@ using paddle::tape::CreateRecordioFileReader;
 using paddle::tape::ReadNext;
 
 TEST(Cifar, TestCPU) {
-  std::string filename1 = "/tmp/cifar10_train.recordio";
-  std::string filename2 = "/tmp/cifar10_test.recordio";
+  std::string filename1 = "/tmp/cifar10_train_64_CUDAPlace(1).recordio";
+  std::string filename2 = "/tmp/cifar10_test_64_CUDAPlace(1).recordio";
   auto train_reader = CreateRecordioFileReader(
-      filename1, {32, 3, 32, 32, 32, 1}, {4, 2}, {0, 0});
+      filename1, {128, 3, 32, 32, 32, 1}, {4, 2}, {0, 0});
   auto test_reader = CreateRecordioFileReader(
-      filename2, {32, 3, 32, 32, 32, 1}, {4, 2}, {0, 0});
+      filename2, {128, 3, 32, 32, 32, 1}, {4, 2}, {0, 0});
 
   // input 3x32x32
   // after conv1_1   64x32x32
@@ -87,7 +87,7 @@ TEST(Cifar, TestCPU) {
   Linear fc2(512, 512, "relu");
   Linear fc3(512, 10, "softmax");
 
-  Adam adam(0.001);
+  SGD adam(0.001);
 
   auto vgg16_forward = [&](VariableHandle input) -> VariableHandle {
     auto pool1 = pool2d(conv1_2(conv1_1(input)));
@@ -99,14 +99,16 @@ TEST(Cifar, TestCPU) {
   };
 
   int total_steps = 10000;
-  int test_steps = 10;
-  int print_step = 10;
+  int test_steps = 1000;
+  int print_step = 5;
   float threshold = 0.6f;
 
+  //  auto place = paddle::platform::CPUPlace();
+  auto place = paddle::platform::CUDAPlace(1);
   for (int i = 0; i < total_steps; ++i) {
     LOG(INFO) << "Train step #" << i;
 
-    reset_global_tape();
+    reset_global_tape(place);
     auto data_label = ReadNext(train_reader, true);
     auto data = data_label[0];
     auto label = data_label[1];
@@ -115,12 +117,20 @@ TEST(Cifar, TestCPU) {
     auto loss = mean(cross_entropy(predict, label));
     auto precision = accuracy(predict, label);
 
-    get_global_tape().Backward(loss);
+    LOG(INFO) << "Before forward";
+    LOG(INFO) << loss->Value();
+    LOG(INFO) << "After forward";
 
+    LOG(INFO) << "Before backward";
+    get_global_tape().Backward(loss);
+    LOG(INFO) << "After backward";
+
+    LOG(INFO) << "Before optimizer";
     // Update all parameters
     for (auto w : OptimizableParameters()) {
       adam.Update(w);
     }
+    LOG(INFO) << "After optimizer";
 
     // Every time certain amount of batches have been processed,
     // we test the average loss and accuracy on the test data set,
@@ -132,10 +142,11 @@ TEST(Cifar, TestCPU) {
       for (int i = 0; i < test_steps; ++i) {
         LOG(INFO) << "Test step #" << i;
 
-        reset_global_tape();
+        reset_global_tape(place);
 
         auto data_label = ReadNext(test_reader, false);
         if (data_label.empty()) {
+          LOG(INFO) << "full test set has been traversed";
           break;
         }
 
@@ -148,10 +159,14 @@ TEST(Cifar, TestCPU) {
 
         get_global_tape().Forward();
 
-        losses.push_back(
-            loss->Get<paddle::framework::LoDTensor>().data<float>()[0]);
-        accuracies.push_back(
-            precision->Get<paddle::framework::LoDTensor>().data<float>()[0]);
+        losses.push_back(loss->Value()
+                             .CopyToCPU()
+                             ->Get<paddle::framework::LoDTensor>()
+                             .data<float>()[0]);
+        accuracies.push_back(precision->Value()
+                                 .CopyToCPU()
+                                 ->Get<paddle::framework::LoDTensor>()
+                                 .data<float>()[0]);
       }
 
       float avg_loss =

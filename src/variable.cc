@@ -15,6 +15,7 @@
 #include "src/tape.h"
 
 #include "paddle/fluid/framework/lod_tensor_array.h"
+#include "paddle/fluid/framework/tensor_util.h"
 
 namespace paddle {
 namespace tape {
@@ -22,10 +23,9 @@ namespace tape {
 std::ostream& operator<<(std::ostream& os, const Variable& var) {
   LOG(INFO) << "Printing " << var.Name();
   if (var.Var().IsType<framework::LoDTensor>()) {
-    os << var.Var().Get<framework::LoDTensor>();
+    os << var.Get<framework::LoDTensor>();
   } else if (var.Var().IsType<framework::LoDTensorArray>()) {
-    framework::LoDTensorArray array =
-        var.Var().Get<framework::LoDTensorArray>();
+    framework::LoDTensorArray array = var.Get<framework::LoDTensorArray>();
     for (size_t i = 0; i < array.size(); ++i) {
       os << "Printing lod_tensor #" << i << " in lod_tensor_array "
          << var.Name() << "\n";
@@ -37,8 +37,27 @@ std::ostream& operator<<(std::ostream& os, const Variable& var) {
   return os;
 }
 
+VariableHandle Variable::CopyToCPU() const {
+  auto place = this->Get<framework::LoDTensor>().place();
+  auto context = platform::DeviceContextPool::Instance().Get(place);
+  VariableHandle cpu_copy(new Variable("temp"));
+  framework::TensorCopy(this->Get<framework::LoDTensor>(),
+                        platform::CPUPlace(),
+                        *context,
+                        cpu_copy->GetMutable<framework::LoDTensor>());
+  context->Wait();
+  return cpu_copy;
+}
+
 const Variable& Variable::Value() {
   get_global_tape().Forward();
+  auto place = this->Get<framework::LoDTensor>().place();
+  PADDLE_ENFORCE(platform::is_same_place(place, get_global_tape().Place()),
+                 "Data place should match tape place");
+  if (platform::is_gpu_place(place)) {
+    auto context = platform::DeviceContextPool::Instance().Get(place);
+    context->Wait();
+  }
   return *this;
 }
 

@@ -274,7 +274,9 @@ void Tape::Backward(VariableHandle target) {
     }
   }
 
+  LOG(INFO) << "forward backward tape";
   backward_tape_->Forward();
+  LOG(INFO) << "finish backward";
   has_been_backwarded_ = true;
 }
 

@@ -59,6 +59,9 @@ class Variable {
   // Evaluate a variable by running Forward() on the global tape
   const Variable &Value();
 
+  // Copy Variable data to CPU
+  VariableHandle CopyToCPU() const;
+
   // TODO(tonyyang-svail): No need to expose name
   std::string Name() const { return name_; }
 
