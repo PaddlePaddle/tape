@@ -46,6 +46,15 @@ TEST(ParameterCollection, TestAddParameter) {
   }
 }
 
+TEST(ParameterCollection, TestLookUp) {
+  ParameterCollection pc;
+  pc.AddParameter(
+      "w", "fill_constant", {{"shape", std::vector<int>{3}}, {"value", 42.0f}});
+  auto params = pc.OptimizableParameters();
+  auto looked_up_params = pc.LookUp({params[0]->Name()});
+  EnforceClose<float>(params[0], looked_up_params[0], 0.0001);
+}
+
 TEST(ParameterCollection, TestSaveLoadAllParameters) {
   std::string file_path = "/tmp/test_parameter_save/";
   ParameterCollection pc;
