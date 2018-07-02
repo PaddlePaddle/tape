@@ -24,6 +24,7 @@
 using paddle::tape::VariableHandle;
 using paddle::tape::Linear;
 using Conv2D = paddle::tape::Convolution2D;
+using paddle::tape::BatchNorm;
 using paddle::tape::SGD;
 using paddle::tape::Adam;
 using paddle::tape::accuracy;
@@ -50,52 +51,86 @@ TEST(Cifar, TestCPU) {
   // after conv1_2   64x32x32
   // after pool1     64x16x16
   Conv2D conv1_1(3, 64, 3);
+  BatchNorm bn1_1(64, "relu");
   Conv2D conv1_2(64, 64, 3);
+  BatchNorm bn1_2(64, "relu");
 
   // after conv2_1   128x16x16
   // after conv2_2   128x16x16
   // after pool2     128x8x8
   Conv2D conv2_1(64, 128, 3);
+  BatchNorm bn2_1(128, "relu");
   Conv2D conv2_2(128, 128, 3);
+  BatchNorm bn2_2(128, "relu");
 
   // after conv3_1   256x8x8
   // after conv3_2   256x8x8
   // after conv3_3   256x8x8
   // after pool3     256x4x4
   Conv2D conv3_1(128, 256, 3);
+  BatchNorm bn3_1(256, "relu");
   Conv2D conv3_2(256, 256, 3);
+  BatchNorm bn3_2(256, "relu");
   Conv2D conv3_3(256, 256, 3);
+  BatchNorm bn3_3(256, "relu");
 
   // after conv4_1   512x4x4
   // after conv4_2   512x4x4
   // after conv4_3   512x4x4
   // after pool4     512x2x2
   Conv2D conv4_1(256, 512, 3);
+  BatchNorm bn4_1(512, "relu");
   Conv2D conv4_2(512, 512, 3);
+  BatchNorm bn4_2(512, "relu");
   Conv2D conv4_3(512, 512, 3);
+  BatchNorm bn4_3(512, "relu");
 
   // after conv5_1   512x2x2
   // after conv5_2   512x2x2
   // after conv5_3   512x2x2
   // after pool5     512x1x1
   Conv2D conv5_1(512, 512, 3);
+  BatchNorm bn5_1(512, "relu");
   Conv2D conv5_2(512, 512, 3);
+  BatchNorm bn5_2(512, "relu");
   Conv2D conv5_3(512, 512, 3);
+  BatchNorm bn5_3(512, "relu");
 
   // Input dim 512x1x1 = 512
-  Linear fc1(512, 512, "relu");
-  Linear fc2(512, 512, "relu");
+  Linear fc1(512, 512);
+  BatchNorm bn6(512, "relu");
+  Linear fc2(512, 512);
   Linear fc3(512, 10, "softmax");
 
   Adam adam(0.001);
 
-  auto vgg16_forward = [&](VariableHandle input) -> VariableHandle {
-    auto pool1 = pool2d(conv1_2(conv1_1(input)));
-    auto pool2 = pool2d(conv2_2(conv2_1(pool1)));
-    auto pool3 = pool2d(conv3_3(conv3_2(conv3_1(pool2))));
-    auto pool4 = pool2d(conv4_3(conv4_2(conv4_1(pool3))));
-    auto pool5 = pool2d(conv5_3(conv5_2(conv5_1(pool4))));
-    return fc3(fc2(fc1(pool5)));
+  auto vgg16_forward = [&](VariableHandle input,
+                           bool is_test) -> VariableHandle {
+    paddle::framework::AttributeMap attrs;
+    attrs["is_test"] = is_test;
+    attrs["dropout_prob"] = 0.3f;
+    auto temp1 = dropout(bn1_1(conv1_1(input), attrs), attrs);
+    auto pool1 = pool2d(bn1_2(conv1_2(temp1), attrs));
+
+    attrs["dropout_prob"] = 0.4f;
+    auto temp2 = dropout(bn2_1(conv2_1(pool1), attrs), attrs);
+    auto pool2 = pool2d(bn2_2(conv2_2(temp2), attrs));
+
+    auto temp3_1 = dropout(bn3_1(conv3_1(pool2), attrs), attrs);
+    auto temp3_2 = dropout(bn3_2(conv3_2(temp3_1), attrs), attrs);
+    auto pool3 = pool2d(bn3_3(conv3_3(temp3_2), attrs));
+
+    auto temp4_1 = dropout(bn4_1(conv4_1(pool3), attrs), attrs);
+    auto temp4_2 = dropout(bn4_2(conv4_2(temp4_1), attrs), attrs);
+    auto pool4 = pool2d(bn4_3(conv4_3(temp4_2), attrs));
+
+    auto temp5_1 = dropout(bn5_1(conv5_1(pool4), attrs), attrs);
+    auto temp5_2 = dropout(bn5_2(conv5_2(temp5_1), attrs), attrs);
+    auto pool5 = pool2d(bn5_3(conv5_3(temp5_2), attrs));
+
+    attrs["dropout_prob"] = 0.5f;
+    auto temp6 = bn6(fc1(dropout(pool5, attrs)), attrs);
+    return fc3(fc2(dropout(temp6, attrs)));
   };
 
   int total_steps = 10000;
@@ -113,7 +148,7 @@ TEST(Cifar, TestCPU) {
     auto data = data_label[0];
     auto label = data_label[1];
 
-    auto predict = vgg16_forward(data);
+    auto predict = vgg16_forward(data, false);
     auto loss = mean(cross_entropy(predict, label));
     auto precision = accuracy(predict, label);
 
@@ -151,7 +186,7 @@ TEST(Cifar, TestCPU) {
         auto data = data_label[0];
         auto label = data_label[1];
 
-        auto predict = vgg16_forward(data);
+        auto predict = vgg16_forward(data, true);
         auto loss = mean(cross_entropy(predict, label));
         auto precision = accuracy(predict, label);
 
