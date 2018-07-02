@@ -139,9 +139,7 @@ class Convolution2D {
       VariableHandle input,
       const framework::AttributeMap &conv_op_attrs = {{"paddings",
                                                        std::vector<int>{1, 1}},
-                                                      {"use_cudnn", true},
-                                                      {"workspace_size_MB",
-                                                       2048}},
+                                                      {"use_cudnn", true}},
       const framework::AttributeMap &add_op_attrs = {{"axis", 1}}) {
     VariableHandle pre_bias(new Variable("conv"));
     get_global_tape().AddOp("conv2d",

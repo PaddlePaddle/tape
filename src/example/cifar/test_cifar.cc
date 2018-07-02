@@ -39,12 +39,16 @@ using paddle::tape::CreateRecordioFileReader;
 using paddle::tape::ReadNext;
 
 TEST(Cifar, TestCPU) {
-  std::string filename1 = "/tmp/cifar10_train_64_CUDAPlace(1).recordio";
-  std::string filename2 = "/tmp/cifar10_test_64_CUDAPlace(1).recordio";
+  // auto place = paddle::platform::CPUPlace();
+  auto place = paddle::platform::CUDAPlace(0);
+  reset_global_tape(place);
+
+  std::string filename1 = "/tmp/cifar10_train_128_CPUPlace.recordio";
+  std::string filename2 = "/tmp/cifar10_test_128_CPUPlace.recordio";
   auto train_reader = CreateRecordioFileReader(
-      filename1, {128, 3, 32, 32, 32, 1}, {4, 2}, {0, 0});
+      filename1, {128, 3, 32, 32, 128, 1}, {4, 2}, {0, 0});
   auto test_reader = CreateRecordioFileReader(
-      filename2, {128, 3, 32, 32, 32, 1}, {4, 2}, {0, 0});
+      filename2, {128, 3, 32, 32, 128, 1}, {4, 2}, {0, 0});
 
   // input 3x32x32
   // after conv1_1   64x32x32
@@ -135,11 +139,9 @@ TEST(Cifar, TestCPU) {
 
   int total_steps = 10000;
   int test_steps = 1000;
-  int print_step = 5;
-  float threshold = 0.6f;
+  int print_step = 200;
+  float threshold = 0.8f;
 
-  //  auto place = paddle::platform::CPUPlace();
-  auto place = paddle::platform::CUDAPlace(1);
   for (int i = 0; i < total_steps; ++i) {
     LOG(INFO) << "Train step #" << i;
 
@@ -152,18 +154,12 @@ TEST(Cifar, TestCPU) {
     auto loss = mean(cross_entropy(predict, label));
     auto precision = accuracy(predict, label);
 
-    LOG(INFO) << loss->Value();
-
-    LOG(INFO) << "Before backward";
     get_global_tape().Backward(loss);
-    LOG(INFO) << "After backward";
 
-    LOG(INFO) << "Before optimizer";
     // Update all parameters
     for (auto w : OptimizableParameters()) {
       adam.Update(w);
     }
-    LOG(INFO) << "After optimizer";
 
     // Every time certain amount of batches have been processed,
     // we test the average loss and accuracy on the test data set,
@@ -172,14 +168,13 @@ TEST(Cifar, TestCPU) {
       std::vector<float> losses;
       std::vector<float> accuracies;
 
+      LOG(INFO) << "Start testing";
       for (int i = 0; i < test_steps; ++i) {
-        LOG(INFO) << "Test step #" << i;
-
         reset_global_tape(place);
 
         auto data_label = ReadNext(test_reader, false);
         if (data_label.empty()) {
-          LOG(INFO) << "full test set has been traversed";
+          LOG(INFO) << "Full test set has been traversed";
           break;
         }
 

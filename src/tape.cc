@@ -212,7 +212,7 @@ void Tape::Backward(VariableHandle target) {
   Forward();
 
   // TODO(tonyyang-svail): check output of last op is target
-  backward_tape_.reset(new Tape());
+  backward_tape_.reset(new Tape(Place()));
 
   backward_tape_->AddOp(
       "fill_ones_like", {{"X", {target}}}, {{"Out", {target->Grad()}}}, {});
@@ -274,9 +274,7 @@ void Tape::Backward(VariableHandle target) {
     }
   }
 
-  LOG(INFO) << "forward backward tape";
   backward_tape_->Forward();
-  LOG(INFO) << "finish backward";
   has_been_backwarded_ = true;
 }
 
@@ -351,7 +349,7 @@ void RunOperatorWithKernel(const std::string &type,
                            const VariableHandleMap &in_vars,
                            const VariableHandleMap &out_vars,
                            const framework::AttributeMap &attrs) {
-  Tape temp_tape;
+  Tape temp_tape(get_global_tape().Place());
   temp_tape.AddOp(type, in_vars, out_vars, attrs);
   temp_tape.Forward();
 }

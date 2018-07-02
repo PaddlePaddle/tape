@@ -52,5 +52,5 @@ def create_cifar_recordio_files(batch_size=32, place=fluid.CPUPlace()):
 
 
 if __name__ == "__main__":
-    create_cifar_recordio_files(64, fluid.CUDAPlace(1))
-    create_cifar_recordio_files(64, fluid.CUDAPlace(1))
+    create_cifar_recordio_files(128)
+    create_cifar_recordio_files(128)
