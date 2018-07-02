@@ -47,6 +47,8 @@ class ParameterCollection {
 
   void MarkNoGrad(const std::string &name) { no_grad_name_.insert(name); }
 
+  std::vector<ParameterHandle> LookUp(std::vector<std::string> names);
+
   // All parameters excluding no_grad_name_
   std::vector<ParameterHandle> OptimizableParameters();
 

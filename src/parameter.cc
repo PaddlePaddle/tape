@@ -20,6 +20,8 @@
 #include <iomanip>
 #include <vector>
 
+using std::vector;
+
 namespace paddle {
 namespace tape {
 
@@ -45,8 +47,16 @@ ParameterHandle ParameterCollection::AddParameter(
   return param;
 }
 
-std::vector<ParameterHandle> ParameterCollection::OptimizableParameters() {
-  std::vector<ParameterHandle> rval;
+vector<ParameterHandle> ParameterCollection::LookUp(vector<std::string> names) {
+  vector<ParameterHandle> params;
+  for (auto &name : names) {
+    params.push_back(params_[name]);
+  }
+  return params;
+}
+
+vector<ParameterHandle> ParameterCollection::OptimizableParameters() {
+  vector<ParameterHandle> rval;
   for (auto &pair : params_) {
     if (no_grad_name_.find(pair.first) == no_grad_name_.end()) {
       rval.emplace_back(pair.second);
@@ -67,7 +77,7 @@ void ParameterCollection::SaveAllParameters(std::string directory_name) {
   }
   VLOG(3) << directory_name;
   PADDLE_ENFORCE_EQ(directory_name.back(), '/');
-  PADDLE_ENFORCE_EQ(mkdir(directory_name.c_str(), 0775),
+  PADDLE_ENFORCE_EQ(mkdir(directory_name.c_str(), 0664),
                     0,
                     "directory %s already exists",
                     directory_name);
@@ -102,10 +112,8 @@ ParameterCollection::ParameterCollection(std::string directory_name) {
                   {},
                   {{"Out", {param}}},
                   {{"file_path", directory_name + filename}});
-      LOG(INFO) << filename;
-      LOG(INFO) << param_name;
-      LOG(INFO) << param->Name();
-      // TODO(tonyyang-svail) batchnorm
+      // TODO(tonyyang-svail): batchnorm's Varaince and Mean should be added to
+      // no_grad_
       params_[param->Name()] = param;
     }
   }
@@ -116,7 +124,7 @@ ParameterCollection &GlobalParameterCollection() {
   return pc;
 }
 
-std::vector<ParameterHandle> OptimizableParameters() {
+vector<ParameterHandle> OptimizableParameters() {
   return GlobalParameterCollection().OptimizableParameters();
 }
 
