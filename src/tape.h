@@ -37,9 +37,16 @@ class Variable {
   explicit Variable(const std::string pre_fix)
       : name_(pre_fix + std::to_string(count())) {}
 
-  Variable(const std::string pre_fix, bool is_grad)
-      : name_(pre_fix + (is_grad ? framework::kGradVarSuffix
-                                 : std::to_string(count()))) {}
+  enum Suffix { COUNT, GRAD, NONE };
+  Variable(const std::string pre_fix, Suffix suffix) {
+    if (suffix == Suffix::COUNT) {
+      name_ = pre_fix + std::to_string(count());
+    } else if (suffix == Suffix::GRAD) {
+      name_ = pre_fix + framework::kGradVarSuffix;
+    } else {
+      name_ = pre_fix;
+    }
+  }
 
   ~Variable() { VLOG(10) << "Deleting " << Name(); }
 
@@ -47,7 +54,7 @@ class Variable {
 
   VariableHandle Grad() {
     if (grad_.expired()) {
-      VariableHandle new_grad(new Variable(name_, true));
+      VariableHandle new_grad(new Variable(name_, Suffix::GRAD));
       grad_ = new_grad;
       return new_grad;
     } else {

@@ -13,7 +13,9 @@
 // limitations under the License.
 #pragma once
 
+#include <map>
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -27,30 +29,38 @@ using ParameterHandle = std::shared_ptr<Parameter>;
 
 class Parameter : public Variable {
  public:
-  explicit Parameter(std::string name) : Variable(name) {}
+  explicit Parameter(const std::string &name,
+                     Variable::Suffix suffix = Variable::Suffix::COUNT)
+      : Variable(name, suffix) {}
 };
 
 class ParameterCollection {
  public:
+  ParameterCollection() {}
+
+  // Load Parameter from a directory
+  explicit ParameterCollection(std::string directory_name);
+
   ParameterHandle AddParameter(const std::string &name,
                                const std::string &initializer,
                                const framework::AttributeMap &attrs);
 
-  // batch norm parameter are special since it is not updated by optimizer
-  ParameterHandle AddBNParameter(const std::string &name,
-                                 const std::string &initializer,
-                                 const framework::AttributeMap &attrs);
+  void MarkNoGrad(const std::string &name) { no_grad_name_.insert(name); }
 
-  // All parameters excluding batch norm parameters
+  std::vector<ParameterHandle> LookUp(std::vector<std::string> names);
+
+  // All parameters excluding no_grad_name_
   std::vector<ParameterHandle> OptimizableParameters();
+
+  void SaveAllParameters(std::string directory_name = "");
 
  private:
   void InitParameter(ParameterHandle param,
                      const std::string &initializer,
                      const framework::AttributeMap &attrs);
 
-  std::vector<ParameterHandle> optimizable_params_;
-  std::vector<ParameterHandle> batch_norm_params_;
+  std::set<std::string> no_grad_name_;
+  std::map<std::string, ParameterHandle> params_;
 };
 
 ParameterCollection &GlobalParameterCollection();
