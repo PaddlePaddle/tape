@@ -33,6 +33,13 @@ using VariableHandleMap = std::map<std::string, std::vector<VariableHandle>>;
 
 std::ostream &operator<<(std::ostream &, const Variable &);
 
+class Optimizer {
+ public:
+  virtual void Step() = 0;
+
+  virtual ~Optimizer() {}
+};
+
 class Variable {
  public:
   explicit Variable(const std::string pre_fix)
@@ -136,6 +143,7 @@ class Tape {
              const framework::AttributeMap &attrs);
   void Forward();
   void Backward(VariableHandle target);
+  void BackwardAndOptimize(VariableHandle target, Optimizer *optimizer);
 
   bool HasBeenBackwarded() { return has_been_backwarded_; }
 

@@ -206,6 +206,11 @@ void Tape::DescMapToVarMap(
   }
 }
 
+void Tape::BackwardAndOptimize(VariableHandle target, Optimizer *optimizer) {
+  Backward(target);
+  optimizer->Step();
+}
+
 void Tape::Backward(VariableHandle target) {
   PADDLE_ENFORCE(!has_been_backwarded_, "A tape can only backward once.");
 

@@ -156,12 +156,7 @@ TEST(Cifar, TestCPU) {
     auto loss = mean(cross_entropy(predict, label));
     auto precision = accuracy(predict, label);
 
-    get_global_tape().Backward(loss);
-
-    // Update all parameters
-    for (auto w : OptimizableParameters()) {
-      adam.Update(w);
-    }
+    get_global_tape().BackwardAndOptimize(loss, &adam);
 
     // Every time certain amount of batches have been processed,
     // we test the average loss and accuracy on the test data set,

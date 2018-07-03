@@ -34,13 +34,6 @@ namespace tape {
 
 class Function {};
 
-class Optimizer {
- public:
-  virtual void Step(VariableHandle input) = 0;
-
-  virtual void ~Optimizer() {}
-};
-
 class RandomSeed {
  public:
   static int GetRandomSeed() { return 0; }
@@ -185,7 +178,11 @@ class SGD : public Optimizer {
     RunOperator("fill_constant", {}, {{"Out", {learning_rate_}}}, attrs);
   }
 
-  void Step(VariableHandle input) override { Update(input); }
+  void Step() override {
+    for (auto w : OptimizableParameters()) {
+      Update(w);
+    }
+  }
 
  private:
   void Update(VariableHandle input) {
@@ -205,7 +202,11 @@ class SGD : public Optimizer {
 class Adam : public Optimizer {
  public:
   explicit Adam(float learning_rate, float beta1 = 0.9f, float beta2 = 0.999f)
-      : learning_rate_(new Variable("adam")), beta1_(beta1), beta2_(beta2) {
+      : learning_rate_(new Variable("adam")),
+        beta1_pow_var_(new Variable("adam")),
+        beta2_pow_var_(new Variable("adam")),
+        beta1_(beta1),
+        beta2_(beta2) {
     std::string initializer = "fill_constant";
     framework::AttributeMap attrs;
     attrs["shape"] = std::vector<int>{1};
@@ -213,9 +214,21 @@ class Adam : public Optimizer {
     RunOperator("fill_constant", {}, {{"Out", {learning_rate_}}}, attrs);
   }
 
-  void Step(VariableHandle input) override {
-    // Some book keeping here
-    Update(input);
+  void Step() override {
+    // Update optimizer parameters
+    beta1_pow_ *= beta1_;
+    beta2_pow_ *= beta2_;
+    std::string initializer = "fill_constant";
+    framework::AttributeMap attrs;
+    attrs["shape"] = std::vector<int>{1};
+    attrs["value"] = beta1_pow_;
+    RunOperator("fill_constant", {}, {{"Out", {beta1_pow_var_}}}, attrs);
+    attrs["value"] = beta2_pow_;
+    RunOperator("fill_constant", {}, {{"Out", {beta2_pow_var_}}}, attrs);
+    // Update model parameters
+    for (auto w : OptimizableParameters()) {
+      Update(w);
+    }
   }
 
  private:
@@ -234,36 +247,14 @@ class Adam : public Optimizer {
       RunOperator("fill_constant", {}, {{"Out", {moment1}}}, attrs);
       RunOperator("fill_constant", {}, {{"Out", {moment2}}}, attrs);
 
-      attrs["shape"] = std::vector<int>{1};
-      attrs["value"] = 1.0f;
-      VariableHandle beta1_pow(new Variable("adam"));
-      VariableHandle beta2_pow(new Variable("adam"));
-      RunOperator("fill_constant", {}, {{"Out", {beta1_pow}}}, attrs);
-      RunOperator("fill_constant", {}, {{"Out", {beta2_pow}}}, attrs);
-
       hyperparams->emplace_back(moment1);
       hyperparams->emplace_back(moment2);
-      hyperparams->emplace_back(beta1_pow);
-      hyperparams->emplace_back(beta2_pow);
     }
 
     PADDLE_ENFORCE_EQ(
-        hyperparams->size(), 4, "Adam should have four hyperparameters");
+        hyperparams->size(), 2, "Adam should have two hyperparameters");
     auto moment1 = hyperparams->at(0);
     auto moment2 = hyperparams->at(1);
-    auto beta1_pow = hyperparams->at(2);
-    auto beta2_pow = hyperparams->at(3);
-
-    framework::AttributeMap attrs;
-    attrs["shape"] = std::vector<int>{1};
-    attrs["value"] =
-        beta1_pow->FetchValue()->Get<framework::LoDTensor>().data<float>()[0] *
-        beta1_;
-    RunOperator("fill_constant", {}, {{"Out", {beta1_pow}}}, attrs);
-    attrs["value"] =
-        beta2_pow->FetchValue()->Get<framework::LoDTensor>().data<float>()[0] *
-        beta2_;
-    RunOperator("fill_constant", {}, {{"Out", {beta2_pow}}}, attrs);
 
     RunOperatorWithKernel("adam",
                           {{"Param", {input}},
@@ -271,8 +262,8 @@ class Adam : public Optimizer {
                            {"Grad", {input->Grad()}},
                            {"Moment1", {moment1}},
                            {"Moment2", {moment2}},
-                           {"Beta1Pow", {beta1_pow}},
-                           {"Beta2Pow", {beta2_pow}}},
+                           {"Beta1Pow", {beta1_pow_var_}},
+                           {"Beta2Pow", {beta2_pow_var_}}},
                           {{"ParamOut", {input}},
                            {"Moment1Out", {moment1}},
                            {"Moment2Out", {moment2}}},
@@ -280,8 +271,12 @@ class Adam : public Optimizer {
   }
 
   VariableHandle learning_rate_;
+  VariableHandle beta1_pow_var_;
+  VariableHandle beta2_pow_var_;
   float beta1_;
   float beta2_;
+  float beta1_pow_{1.0f};
+  float beta2_pow_{1.0f};
 };
 
 class BatchNorm {
