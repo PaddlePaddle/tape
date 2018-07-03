@@ -213,11 +213,6 @@ void DescMapToVarMap(const unordered_map<string, VariableHandle> &name2var,
   }
 }
 
-void Tape::BackwardAndUpdate(VariableHandle target, Optimizer *optimizer) {
-  Backward(target);
-  optimizer->Step();
-}
-
 void Tape::Backward(VariableHandle target) {
   PADDLE_ENFORCE(!has_been_backwarded_, "A tape can only backward once.");
 

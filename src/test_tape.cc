@@ -14,6 +14,7 @@
 
 #include "gtest/gtest.h"
 #include "src/function.h"
+#include "src/optimizer.h"
 
 using paddle::tape::VariableHandle;
 using paddle::tape::Variable;
@@ -31,6 +32,7 @@ using paddle::tape::reset_global_tape;
 using paddle::tape::get_global_tape;
 using paddle::tape::CreateRecordioFileReader;
 using paddle::tape::ReadNext;
+using paddle::tape::BackwardAndUpdate;
 
 TEST(Tape, TestDropout) {
   std::string initializer = "uniform_random";
@@ -76,7 +78,6 @@ TEST(Tape, TestPool2d) {
 
 TEST(Tape, TestBatchNorm) {
   BatchNorm bn(4, "relu");
-  Adam adam(0.001);
 
   std::string initializer = "uniform_random";
   paddle::framework::AttributeMap attrs;
@@ -91,7 +92,6 @@ TEST(Tape, TestBatchNorm) {
     reset_global_tape();
 
     auto input = filler();
-
     auto loss = bn(input);
 
     get_global_tape().Backward(loss);
@@ -106,8 +106,6 @@ TEST(Tape, TestBatchNorm) {
 TEST(Tape, TestGraph) {
   Convolution2D conv1(3, 16, 3, "relu");
   Convolution2D conv2(16, 1, 3, "relu");
-
-  Adam adam(0.001);
 
   std::string initializer = "uniform_random";
   paddle::framework::AttributeMap attrs;
@@ -146,7 +144,6 @@ TEST(Tape, TestConv) {
     reset_global_tape();
 
     auto input = filler();
-
     auto loss = mean(conv2(conv1(input)));
 
     get_global_tape().Backward(loss);
