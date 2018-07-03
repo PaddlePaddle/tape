@@ -22,6 +22,7 @@
 
 #include "paddle/fluid/framework/operator.h"  // framework::kGradVarSuffix
 #include "paddle/fluid/framework/variable.h"
+#include "paddle/fluid/platform/place.h"
 
 namespace paddle {
 namespace tape {
@@ -64,6 +65,9 @@ class Variable {
 
   // Evaluate a variable by running Forward() on the global tape
   const Variable &Value();
+
+  // Evaluate and make a copy of Variable data on CPU
+  VariableHandle FetchValue();
 
   // TODO(tonyyang-svail): No need to expose name
   std::string Name() const { return name_; }
@@ -123,6 +127,9 @@ struct OpHandle {
 
 class Tape {
  public:
+  Tape() : place_(platform::CPUPlace()) {}
+  explicit Tape(const platform::Place &place) : place_(place) {}
+
   void AddOp(const std::string &type,
              const VariableHandleMap &in_vars,
              const VariableHandleMap &out_vars,
@@ -133,6 +140,8 @@ class Tape {
   bool HasBeenBackwarded() { return has_been_backwarded_; }
 
   std::string GraphVizString(bool with_backward = true);
+
+  const platform::Place &Place() { return place_; }
 
  private:
   /*
@@ -153,6 +162,7 @@ class Tape {
 
   bool has_been_backwarded_ = false;
   size_t current_position_ = 0;
+  platform::Place place_;
 
   std::vector<OpHandle> ops_;
   std::shared_ptr<Tape> backward_tape_;
@@ -169,6 +179,6 @@ void RunOperatorWithKernel(const std::string &type,
 
 Tape &get_global_tape();
 
-void reset_global_tape();
+void reset_global_tape(const platform::Place &place = platform::CPUPlace());
 }  // namespace tape
 }  // namespace paddle

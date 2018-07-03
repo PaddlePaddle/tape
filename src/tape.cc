@@ -156,7 +156,7 @@ void Tape::Forward() {
     framework::OpDesc op_desc =
         CreateOpDesc(op.type_, op.inputs_, op.outputs_, op.attrs_);
     ScopeWrapper scope(op.inputs_, op.outputs_);
-    framework::OpRegistry::CreateOp(op_desc)->Run(scope, platform::CPUPlace());
+    framework::OpRegistry::CreateOp(op_desc)->Run(scope, place_);
     current_position_++;
   }
   VLOG(3) << "Finishing forward -------------------------";
@@ -212,7 +212,7 @@ void Tape::Backward(VariableHandle target) {
   Forward();
 
   // TODO(tonyyang-svail): check output of last op is target
-  backward_tape_.reset(new Tape());
+  backward_tape_.reset(new Tape(Place()));
 
   backward_tape_->AddOp(
       "fill_ones_like", {{"X", {target}}}, {{"Out", {target->Grad()}}}, {});
@@ -341,14 +341,15 @@ void RunOperator(const std::string &type,
                  const framework::AttributeMap &attrs) {
   framework::OpDesc op_desc = CreateOpDesc(type, in_vars, out_vars, attrs);
   ScopeWrapper scope(in_vars, out_vars);
-  framework::OpRegistry::CreateOp(op_desc)->Run(scope, platform::CPUPlace());
+  framework::OpRegistry::CreateOp(op_desc)->Run(scope,
+                                                get_global_tape().Place());
 }
 
 void RunOperatorWithKernel(const std::string &type,
                            const VariableHandleMap &in_vars,
                            const VariableHandleMap &out_vars,
                            const framework::AttributeMap &attrs) {
-  Tape temp_tape;
+  Tape temp_tape(get_global_tape().Place());
   temp_tape.AddOp(type, in_vars, out_vars, attrs);
   temp_tape.Forward();
 }
@@ -358,7 +359,9 @@ Tape &get_global_tape() {
   return T;
 }
 
-void reset_global_tape() { get_global_tape() = Tape(); }
+void reset_global_tape(const platform::Place &place) {
+  get_global_tape() = Tape(place);
+}
 
 }  // namespace tape
 }  // namespace paddle

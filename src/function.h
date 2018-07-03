@@ -24,6 +24,7 @@
 #include "paddle/fluid/framework/op_registry.h"
 #include "paddle/fluid/framework/reader.h"
 #include "paddle/fluid/framework/type_defs.h"
+#include "paddle/fluid/platform/place.h"
 
 #include "src/parameter.h"
 #include "src/tape.h"
@@ -114,13 +115,13 @@ class Linear {
 
 class Convolution2D {
  public:
-  Convolution2D(int c_in, int c_out, int f, const std::string &act = "")
+  Convolution2D(int c_in, int c_out, int f_size, const std::string &act = "")
       : act_(act) {
     // Use Xavier to initialize Weight
-    float fan_in = c_in * f * f, fan_out = c_out * f * f;
+    float fan_in = c_in * f_size * f_size, fan_out = c_out * f_size * f_size;
     float limit = sqrt(6.0 / (fan_in + fan_out));
     framework::AttributeMap attrs;
-    attrs["shape"] = std::vector<int>{c_out, c_in, f, f};
+    attrs["shape"] = std::vector<int>{c_out, c_in, f_size, f_size};
     attrs["min"] = -limit;
     attrs["max"] = limit;
     attrs["seed"] = RandomSeed::GetRandomSeed();
@@ -136,7 +137,9 @@ class Convolution2D {
 
   VariableHandle operator()(
       VariableHandle input,
-      const framework::AttributeMap &conv_op_attrs = {},
+      const framework::AttributeMap &conv_op_attrs = {{"paddings",
+                                                       std::vector<int>{1, 1}},
+                                                      {"use_cudnn", true}},
       const framework::AttributeMap &add_op_attrs = {{"axis", 1}}) {
     VariableHandle pre_bias(new Variable("conv"));
     get_global_tape().AddOp("conv2d",
@@ -236,10 +239,16 @@ class Adam {
     auto beta1_pow = hyperparams->at(2);
     auto beta2_pow = hyperparams->at(3);
 
-    beta1_pow->GetMutable<paddle::framework::LoDTensor>()->data<float>()[0] *=
+    framework::AttributeMap attrs;
+    attrs["shape"] = std::vector<int>{1};
+    attrs["value"] =
+        beta1_pow->FetchValue()->Get<framework::LoDTensor>().data<float>()[0] *
         beta1_;
-    beta2_pow->GetMutable<paddle::framework::LoDTensor>()->data<float>()[0] *=
+    RunOperator("fill_constant", {}, {{"Out", {beta1_pow}}}, attrs);
+    attrs["value"] =
+        beta2_pow->FetchValue()->Get<framework::LoDTensor>().data<float>()[0] *
         beta2_;
+    RunOperator("fill_constant", {}, {{"Out", {beta2_pow}}}, attrs);
 
     RunOperatorWithKernel("adam",
                           {{"Param", {input}},
@@ -345,7 +354,8 @@ VariableHandle accuracy(VariableHandle prediction,
 }
 
 VariableHandle pool2d(VariableHandle x,
-                      const framework::AttributeMap &attrs = {}) {
+                      const framework::AttributeMap &attrs = {
+                          {"strides", std::vector<int>{2, 2}}}) {
   VariableHandle out(new Variable("pool2d"));
   get_global_tape().AddOp("pool2d", {{"X", {x}}}, {{"Out", {out}}}, attrs);
   return out;
@@ -397,9 +407,10 @@ VariableHandle CreateRecordioFileReader(std::string filename,
                                         std::vector<int> ranks,
                                         std::vector<int> lod_levels) {
   std::ifstream infile(filename);
-  PADDLE_ENFORCE(infile.good(),
-                 "%s doesn't exist; have you run create_mnist_recordio.py?",
-                 filename);
+  PADDLE_ENFORCE(
+      infile.good(),
+      "%s doesn't exist; have you run the corresponding create_recordio.py?",
+      filename);
 
   VariableHandle reader(new paddle::tape::Variable("reader"));
 
