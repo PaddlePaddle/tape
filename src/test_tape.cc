@@ -79,6 +79,8 @@ TEST(Tape, TestPool2d) {
 TEST(Tape, TestBatchNorm) {
   BatchNorm bn(4, "relu");
 
+  Adam adam(0.001);
+
   std::string initializer = "uniform_random";
   paddle::framework::AttributeMap attrs;
   attrs["min"] = -1.0f;
@@ -94,12 +96,8 @@ TEST(Tape, TestBatchNorm) {
     auto input = filler();
     auto loss = bn(input);
 
-    get_global_tape().Backward(loss);
     LOG(INFO) << loss->Value();
-
-    for (auto w : bn.Params()) {
-      adam.Update(w);
-    }
+    BackwardAndUpdate(loss, &adam);
   }
 }
 
@@ -146,14 +144,7 @@ TEST(Tape, TestConv) {
     auto input = filler();
     auto loss = mean(conv2(conv1(input)));
 
-    get_global_tape().Backward(loss);
-
-    for (auto w : conv1.Params()) {
-      adam.Update(w);
-    }
-    for (auto w : conv2.Params()) {
-      adam.Update(w);
-    }
+    BackwardAndUpdate(loss, &adam);
   }
 }
 
@@ -180,14 +171,7 @@ TEST(Tape, TestMLP) {
     auto loss = mean(linear2(linear1(input)));
     LOG(INFO) << loss->Value();
 
-    get_global_tape().Backward(loss);
-
-    for (auto w : linear1.Params()) {
-      sgd.Update(w);
-    }
-    for (auto w : linear2.Params()) {
-      sgd.Update(w);
-    }
+    BackwardAndUpdate(loss, &sgd);
   }
 }
 

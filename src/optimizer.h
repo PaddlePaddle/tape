@@ -44,7 +44,6 @@ class SGD : public Optimizer {
 
   void Step() override {
     for (auto &w : OptimizableParameters()) {
-      LOG(INFO) << "updating " << w->Name();
       Update(w);
     }
   }
@@ -92,7 +91,6 @@ class Adam : public Optimizer {
     RunOperator("fill_constant", {}, {{"Out", {beta2_pow_var_}}}, attrs);
     // Update model parameters
     for (auto &w : OptimizableParameters()) {
-      LOG(INFO) << "updating " << w->Name();
       Update(w);
     }
   }

@@ -105,7 +105,7 @@ class Linear {
     return post_act;
   }
 
-  std::vector<VariableHandle> Params() { return {w_, b_}; }
+  std::vector<ParameterHandle> Params() { return {w_, b_}; }
 
  private:
   ParameterHandle w_;
@@ -160,7 +160,7 @@ class Convolution2D {
     return post_act;
   }
 
-  std::vector<VariableHandle> Params() { return {w_, b_}; }
+  std::vector<ParameterHandle> Params() { return {w_, b_}; }
 
  private:
   ParameterHandle w_;
@@ -218,7 +218,7 @@ class BatchNorm {
   }
 
   // Only scale and bias need to be updated by SGD
-  std::vector<VariableHandle> Params() { return {scale_, bias_}; }
+  std::vector<ParameterHandle> Params() { return {scale_, bias_}; }
 
  private:
   ParameterHandle scale_;
