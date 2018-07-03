@@ -206,7 +206,7 @@ void Tape::DescMapToVarMap(
   }
 }
 
-void Tape::BackwardAndOptimize(VariableHandle target, Optimizer *optimizer) {
+void Tape::BackwardAndUpdate(VariableHandle target, Optimizer *optimizer) {
   Backward(target);
   optimizer->Step();
 }

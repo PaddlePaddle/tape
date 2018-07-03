@@ -141,7 +141,7 @@ TEST(Cifar, TestCPU) {
 
   int total_steps = 10000;
   int test_steps = 1000;
-  int print_step = 200;
+  int print_step = 100;
   float threshold = 0.8f;
 
   for (int i = 0; i < total_steps; ++i) {
@@ -156,7 +156,7 @@ TEST(Cifar, TestCPU) {
     auto loss = mean(cross_entropy(predict, label));
     auto precision = accuracy(predict, label);
 
-    get_global_tape().BackwardAndOptimize(loss, &adam);
+    get_global_tape().BackwardAndUpdate(loss, &adam);
 
     // Every time certain amount of batches have been processed,
     // we test the average loss and accuracy on the test data set,

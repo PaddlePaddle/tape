@@ -31,11 +31,16 @@ class Variable;
 using VariableHandle = std::shared_ptr<Variable>;
 using VariableHandleMap = std::map<std::string, std::vector<VariableHandle>>;
 
+class Parameter;
+using ParameterHandle = std::shared_ptr<Parameter>;
+
 std::ostream &operator<<(std::ostream &, const Variable &);
 
 class Optimizer {
  public:
   virtual void Step() = 0;
+
+  virtual void Update(ParameterHandle param) = 0;
 
   virtual ~Optimizer() {}
 };
@@ -143,7 +148,7 @@ class Tape {
              const framework::AttributeMap &attrs);
   void Forward();
   void Backward(VariableHandle target);
-  void BackwardAndOptimize(VariableHandle target, Optimizer *optimizer);
+  void BackwardAndUpdate(VariableHandle target, Optimizer *optimizer);
 
   bool HasBeenBackwarded() { return has_been_backwarded_; }
 

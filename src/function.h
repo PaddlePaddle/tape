@@ -179,23 +179,23 @@ class SGD : public Optimizer {
   }
 
   void Step() override {
-    for (auto w : OptimizableParameters()) {
+    for (auto &w : OptimizableParameters()) {
       Update(w);
     }
   }
 
- private:
-  void Update(VariableHandle input) {
+  void Update(ParameterHandle param) override {
     PADDLE_ENFORCE(get_global_tape().HasBeenBackwarded(),
                    "optimization must happen after the backward");
     RunOperatorWithKernel("sgd",
-                          {{"Param", {input}},
+                          {{"Param", {param}},
                            {"LearningRate", {learning_rate_}},
-                           {"Grad", {input->Grad()}}},
-                          {{"ParamOut", {input}}},
+                           {"Grad", {param->Grad()}}},
+                          {{"ParamOut", {param}}},
                           {});
   }
 
+ private:
   VariableHandle learning_rate_;
 };
 
@@ -226,21 +226,20 @@ class Adam : public Optimizer {
     attrs["value"] = beta2_pow_;
     RunOperator("fill_constant", {}, {{"Out", {beta2_pow_var_}}}, attrs);
     // Update model parameters
-    for (auto w : OptimizableParameters()) {
+    for (auto &w : OptimizableParameters()) {
       Update(w);
     }
   }
 
- private:
-  void Update(VariableHandle input) {
+  void Update(ParameterHandle param) override {
     PADDLE_ENFORCE(get_global_tape().HasBeenBackwarded(),
                    "optimization must happen after the backward");
-    auto *hyperparams = input->MutableHyperParams("adam");
+    auto *hyperparams = param->MutableHyperParams("adam");
     // initialize states if they haven't been created
     if (hyperparams->empty()) {
       framework::AttributeMap attrs;
       attrs["shape"] = paddle::framework::vectorize2int(
-          input->Get<paddle::framework::LoDTensor>().dims());
+          param->Get<paddle::framework::LoDTensor>().dims());
       attrs["value"] = 0.0f;
       VariableHandle moment1(new Variable("adam"));
       VariableHandle moment2(new Variable("adam"));
@@ -257,19 +256,20 @@ class Adam : public Optimizer {
     auto moment2 = hyperparams->at(1);
 
     RunOperatorWithKernel("adam",
-                          {{"Param", {input}},
+                          {{"Param", {param}},
                            {"LearningRate", {learning_rate_}},
-                           {"Grad", {input->Grad()}},
+                           {"Grad", {param->Grad()}},
                            {"Moment1", {moment1}},
                            {"Moment2", {moment2}},
                            {"Beta1Pow", {beta1_pow_var_}},
                            {"Beta2Pow", {beta2_pow_var_}}},
-                          {{"ParamOut", {input}},
+                          {{"ParamOut", {param}},
                            {"Moment1Out", {moment1}},
                            {"Moment2Out", {moment2}}},
                           {{"beta1", beta1_}, {"beta2", beta2_}});
   }
 
+ private:
   VariableHandle learning_rate_;
   VariableHandle beta1_pow_var_;
   VariableHandle beta2_pow_var_;
