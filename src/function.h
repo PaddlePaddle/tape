@@ -105,7 +105,7 @@ class Linear {
     return post_act;
   }
 
-  std::vector<VariableHandle> Params() { return {w_, b_}; }
+  std::vector<ParameterHandle> Params() { return {w_, b_}; }
 
  private:
   ParameterHandle w_;
@@ -160,114 +160,12 @@ class Convolution2D {
     return post_act;
   }
 
-  std::vector<VariableHandle> Params() { return {w_, b_}; }
+  std::vector<ParameterHandle> Params() { return {w_, b_}; }
 
  private:
   ParameterHandle w_;
   ParameterHandle b_;
   std::string act_;
-};
-
-class SGD {
- public:
-  explicit SGD(float learning_rate) : learning_rate_(new Variable("sgd")) {
-    std::string initializer = "fill_constant";
-    framework::AttributeMap attrs;
-    attrs["shape"] = std::vector<int>{1};
-    attrs["value"] = learning_rate;
-    RunOperator("fill_constant", {}, {{"Out", {learning_rate_}}}, attrs);
-  }
-
-  void Update(ParameterHandle input) {
-    PADDLE_ENFORCE(get_global_tape().HasBeenBackwarded(),
-                   "optimization must happen after the backward");
-    RunOperatorWithKernel("sgd",
-                          {{"Param", {input}},
-                           {"LearningRate", {learning_rate_}},
-                           {"Grad", {input->Grad()}}},
-                          {{"ParamOut", {input}}},
-                          {});
-  }
-
- private:
-  VariableHandle learning_rate_;
-};
-
-class Adam {
- public:
-  explicit Adam(float learning_rate, float beta1 = 0.9f, float beta2 = 0.999f)
-      : learning_rate_(new Variable("adam")), beta1_(beta1), beta2_(beta2) {
-    std::string initializer = "fill_constant";
-    framework::AttributeMap attrs;
-    attrs["shape"] = std::vector<int>{1};
-    attrs["value"] = learning_rate;
-    RunOperator("fill_constant", {}, {{"Out", {learning_rate_}}}, attrs);
-  }
-
-  void Update(ParameterHandle input) {
-    PADDLE_ENFORCE(get_global_tape().HasBeenBackwarded(),
-                   "optimization must happen after the backward");
-    auto *hyperparams = input->MutableHyperParams("adam");
-    // initialize states if they haven't been created
-    if (hyperparams->empty()) {
-      framework::AttributeMap attrs;
-      attrs["shape"] = paddle::framework::vectorize2int(
-          input->Get<paddle::framework::LoDTensor>().dims());
-      attrs["value"] = 0.0f;
-      ParameterHandle moment1(new Parameter("adam"));
-      ParameterHandle moment2(new Parameter("adam"));
-      RunOperator("fill_constant", {}, {{"Out", {moment1}}}, attrs);
-      RunOperator("fill_constant", {}, {{"Out", {moment2}}}, attrs);
-
-      attrs["shape"] = std::vector<int>{1};
-      attrs["value"] = 1.0f;
-      ParameterHandle beta1_pow(new Parameter("adam"));
-      ParameterHandle beta2_pow(new Parameter("adam"));
-      RunOperator("fill_constant", {}, {{"Out", {beta1_pow}}}, attrs);
-      RunOperator("fill_constant", {}, {{"Out", {beta2_pow}}}, attrs);
-
-      hyperparams->emplace_back(moment1);
-      hyperparams->emplace_back(moment2);
-      hyperparams->emplace_back(beta1_pow);
-      hyperparams->emplace_back(beta2_pow);
-    }
-
-    PADDLE_ENFORCE_EQ(
-        hyperparams->size(), 4, "Adam should have four hyperparameters");
-    auto moment1 = hyperparams->at(0);
-    auto moment2 = hyperparams->at(1);
-    auto beta1_pow = hyperparams->at(2);
-    auto beta2_pow = hyperparams->at(3);
-
-    framework::AttributeMap attrs;
-    attrs["shape"] = std::vector<int>{1};
-    attrs["value"] =
-        beta1_pow->FetchValue()->Get<framework::LoDTensor>().data<float>()[0] *
-        beta1_;
-    RunOperator("fill_constant", {}, {{"Out", {beta1_pow}}}, attrs);
-    attrs["value"] =
-        beta2_pow->FetchValue()->Get<framework::LoDTensor>().data<float>()[0] *
-        beta2_;
-    RunOperator("fill_constant", {}, {{"Out", {beta2_pow}}}, attrs);
-
-    RunOperatorWithKernel("adam",
-                          {{"Param", {input}},
-                           {"LearningRate", {learning_rate_}},
-                           {"Grad", {input->Grad()}},
-                           {"Moment1", {moment1}},
-                           {"Moment2", {moment2}},
-                           {"Beta1Pow", {beta1_pow}},
-                           {"Beta2Pow", {beta2_pow}}},
-                          {{"ParamOut", {input}},
-                           {"Moment1Out", {moment1}},
-                           {"Moment2Out", {moment2}}},
-                          {{"beta1", beta1_}, {"beta2", beta2_}});
-  }
-
- private:
-  VariableHandle learning_rate_;
-  float beta1_;
-  float beta2_;
 };
 
 class BatchNorm {
@@ -320,7 +218,7 @@ class BatchNorm {
   }
 
   // Only scale and bias need to be updated by SGD
-  std::vector<VariableHandle> Params() { return {scale_, bias_}; }
+  std::vector<ParameterHandle> Params() { return {scale_, bias_}; }
 
  private:
   ParameterHandle scale_;

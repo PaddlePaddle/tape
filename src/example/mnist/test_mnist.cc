@@ -17,6 +17,7 @@
 
 #include "gtest/gtest.h"
 #include "src/function.h"
+#include "src/optimizer.h"
 
 using paddle::tape::VariableHandle;
 using paddle::tape::Linear;
@@ -29,6 +30,7 @@ using paddle::tape::cross_entropy;
 using paddle::tape::reset_global_tape;
 using paddle::tape::get_global_tape;
 using paddle::tape::OptimizableParameters;
+using paddle::tape::BackwardAndUpdate;
 
 using paddle::tape::CreateRecordioFileReader;
 using paddle::tape::ReadNext;
@@ -64,11 +66,7 @@ TEST(Mnist, TestCPU) {
     auto loss = mean(cross_entropy(predict, label));
     auto precision = accuracy(predict, label);
 
-    get_global_tape().Backward(loss);
-
-    for (auto w : OptimizableParameters()) {
-      adam.Update(w);
-    }
+    BackwardAndUpdate(loss, &adam);
 
     // Every time certain amount of batches have been processed,
     // we test the average loss and accuracy on the test data set,
