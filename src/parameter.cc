@@ -18,31 +18,33 @@
 #include <sys/stat.h>
 #include <ctime>
 #include <iomanip>
+#include <string>
 #include <vector>
-
-using std::vector;
 
 namespace paddle {
 namespace tape {
+
+using std::vector;
+using std::string;
 
 constexpr char kTensorFileSuffix[] = ".pd";
 
 // borrowed from
 // https://stackoverflow.com/questions/874134/find-if-string-ends-with-another-string-in-c
-inline bool ends_with(std::string const &value, std::string const &ending) {
+bool ends_with(const string &value, const string &ending) {
   if (ending.size() > value.size()) return false;
   return std::equal(ending.rbegin(), ending.rend(), value.rbegin());
 }
 
-ParameterCollection::ParameterCollection(std::string directory_name) {
+ParameterCollection::ParameterCollection(string directory_name) {
   PADDLE_ENFORCE_EQ(directory_name.back(), '/');
   DIR *dir = opendir(directory_name.c_str());
   PADDLE_ENFORCE_NOT_NULL(dir);
   struct dirent *ent;
   while ((ent = readdir(dir)) != nullptr) {
-    std::string filename = ent->d_name;
+    string filename = ent->d_name;
     if (ends_with(filename, kTensorFileSuffix)) {
-      std::string param_name(
+      string param_name(
           filename, 0, filename.size() - strlen(kTensorFileSuffix));
       ParameterHandle param(new Parameter(param_name, Variable::Suffix::NONE));
       RunOperator("load",
@@ -57,8 +59,8 @@ ParameterCollection::ParameterCollection(std::string directory_name) {
 }
 
 ParameterHandle ParameterCollection::AddParameter(
-    const std::string &name,
-    const std::string &initializer,
+    const string &name,
+    const string &initializer,
     const framework::AttributeMap &attrs) {
   ParameterHandle param(new Parameter(name));
   InitParameter(param, initializer, attrs);
@@ -67,7 +69,7 @@ ParameterHandle ParameterCollection::AddParameter(
   return param;
 }
 
-vector<ParameterHandle> ParameterCollection::LookUp(vector<std::string> names) {
+vector<ParameterHandle> ParameterCollection::LookUp(vector<string> names) {
   vector<ParameterHandle> params;
   for (auto &name : names) {
     params.push_back(params_[name]);
@@ -85,7 +87,7 @@ vector<ParameterHandle> ParameterCollection::OptimizableParameters() {
   return rval;
 }
 
-void ParameterCollection::SaveAllParameters(std::string directory_name) {
+void ParameterCollection::SaveAllParameters(string directory_name) {
   if (directory_name.empty()) {
     auto t = std::time(nullptr);
     auto tm = *std::localtime(&t);
@@ -103,13 +105,13 @@ void ParameterCollection::SaveAllParameters(std::string directory_name) {
     auto &param = pair.second;
     VLOG(10) << pair.first;
     VLOG(10) << param->Name();
-    std::string file_path = directory_name + param->Name() + kTensorFileSuffix;
+    string file_path = directory_name + param->Name() + kTensorFileSuffix;
     RunOperator("save", {{"X", {param}}}, {}, {{"file_path", file_path}});
   }
 }
 
 void ParameterCollection::InitParameter(ParameterHandle param,
-                                        const std::string &initializer,
+                                        const string &initializer,
                                         const framework::AttributeMap &attrs) {
   if (initializer == "fill_constant") {
     // fill_constant is an Operator instead of OperatorWithKernel
