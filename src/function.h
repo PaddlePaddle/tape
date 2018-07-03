@@ -34,6 +34,13 @@ namespace tape {
 
 class Function {};
 
+class Optimizer {
+ public:
+  virtual void Step(VariableHandle input) = 0;
+
+  virtual void ~Optimizer() {}
+};
+
 class RandomSeed {
  public:
   static int GetRandomSeed() { return 0; }
@@ -168,7 +175,7 @@ class Convolution2D {
   std::string act_;
 };
 
-class SGD {
+class SGD : public Optimizer {
  public:
   explicit SGD(float learning_rate) : learning_rate_(new Variable("sgd")) {
     std::string initializer = "fill_constant";
@@ -178,6 +185,9 @@ class SGD {
     RunOperator("fill_constant", {}, {{"Out", {learning_rate_}}}, attrs);
   }
 
+  void Step(VariableHandle input) override { Update(input); }
+
+ private:
   void Update(VariableHandle input) {
     PADDLE_ENFORCE(get_global_tape().HasBeenBackwarded(),
                    "optimization must happen after the backward");
@@ -189,11 +199,10 @@ class SGD {
                           {});
   }
 
- private:
   VariableHandle learning_rate_;
 };
 
-class Adam {
+class Adam : public Optimizer {
  public:
   explicit Adam(float learning_rate, float beta1 = 0.9f, float beta2 = 0.999f)
       : learning_rate_(new Variable("adam")), beta1_(beta1), beta2_(beta2) {
@@ -204,6 +213,12 @@ class Adam {
     RunOperator("fill_constant", {}, {{"Out", {learning_rate_}}}, attrs);
   }
 
+  void Step(VariableHandle input) override {
+    // Some book keeping here
+    Update(input);
+  }
+
+ private:
   void Update(VariableHandle input) {
     PADDLE_ENFORCE(get_global_tape().HasBeenBackwarded(),
                    "optimization must happen after the backward");
@@ -264,7 +279,6 @@ class Adam {
                           {{"beta1", beta1_}, {"beta2", beta2_}});
   }
 
- private:
   VariableHandle learning_rate_;
   float beta1_;
   float beta2_;

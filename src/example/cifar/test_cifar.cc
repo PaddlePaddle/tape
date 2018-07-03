@@ -110,31 +110,33 @@ TEST(Cifar, TestCPU) {
 
   auto vgg16_forward = [&](VariableHandle input,
                            bool is_test) -> VariableHandle {
-    paddle::framework::AttributeMap attrs;
-    attrs["is_test"] = is_test;
-    attrs["dropout_prob"] = 0.3f;
-    auto temp1 = dropout(bn1_1(conv1_1(input), attrs), attrs);
-    auto pool1 = pool2d(bn1_2(conv1_2(temp1), attrs));
+    // Set attribute for batchnorm and dropout op
+    paddle::framework::AttributeMap bn_attrs, d_attrs;
+    bn_attrs["is_test"] = is_test;
+    d_attrs["is_test"] = is_test;
+    d_attrs["dropout_prob"] = 0.3f;
+    auto temp1 = dropout(bn1_1(conv1_1(input), bn_attrs), d_attrs);
+    auto pool1 = pool2d(bn1_2(conv1_2(temp1), bn_attrs));
 
-    attrs["dropout_prob"] = 0.4f;
-    auto temp2 = dropout(bn2_1(conv2_1(pool1), attrs), attrs);
-    auto pool2 = pool2d(bn2_2(conv2_2(temp2), attrs));
+    d_attrs["dropout_prob"] = 0.4f;
+    auto temp2 = dropout(bn2_1(conv2_1(pool1), bn_attrs), d_attrs);
+    auto pool2 = pool2d(bn2_2(conv2_2(temp2), bn_attrs));
 
-    auto temp3_1 = dropout(bn3_1(conv3_1(pool2), attrs), attrs);
-    auto temp3_2 = dropout(bn3_2(conv3_2(temp3_1), attrs), attrs);
-    auto pool3 = pool2d(bn3_3(conv3_3(temp3_2), attrs));
+    auto temp3_1 = dropout(bn3_1(conv3_1(pool2), bn_attrs), d_attrs);
+    auto temp3_2 = dropout(bn3_2(conv3_2(temp3_1), bn_attrs), d_attrs);
+    auto pool3 = pool2d(bn3_3(conv3_3(temp3_2), bn_attrs));
 
-    auto temp4_1 = dropout(bn4_1(conv4_1(pool3), attrs), attrs);
-    auto temp4_2 = dropout(bn4_2(conv4_2(temp4_1), attrs), attrs);
-    auto pool4 = pool2d(bn4_3(conv4_3(temp4_2), attrs));
+    auto temp4_1 = dropout(bn4_1(conv4_1(pool3), bn_attrs), d_attrs);
+    auto temp4_2 = dropout(bn4_2(conv4_2(temp4_1), bn_attrs), d_attrs);
+    auto pool4 = pool2d(bn4_3(conv4_3(temp4_2), bn_attrs));
 
-    auto temp5_1 = dropout(bn5_1(conv5_1(pool4), attrs), attrs);
-    auto temp5_2 = dropout(bn5_2(conv5_2(temp5_1), attrs), attrs);
-    auto pool5 = pool2d(bn5_3(conv5_3(temp5_2), attrs));
+    auto temp5_1 = dropout(bn5_1(conv5_1(pool4), bn_attrs), d_attrs);
+    auto temp5_2 = dropout(bn5_2(conv5_2(temp5_1), bn_attrs), d_attrs);
+    auto pool5 = pool2d(bn5_3(conv5_3(temp5_2), bn_attrs));
 
-    attrs["dropout_prob"] = 0.5f;
-    auto temp6 = bn6(fc1(dropout(pool5, attrs)), attrs);
-    return fc3(fc2(dropout(temp6, attrs)));
+    d_attrs["dropout_prob"] = 0.5f;
+    auto temp6 = bn6(fc1(dropout(pool5, d_attrs)), bn_attrs);
+    return fc3(fc2(dropout(temp6, d_attrs)));
   };
 
   int total_steps = 10000;
