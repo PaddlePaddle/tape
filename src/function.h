@@ -178,7 +178,7 @@ class SGD {
     RunOperator("fill_constant", {}, {{"Out", {learning_rate_}}}, attrs);
   }
 
-  void Update(VariableHandle input) {
+  void Update(ParameterHandle input) {
     PADDLE_ENFORCE(get_global_tape().HasBeenBackwarded(),
                    "optimization must happen after the backward");
     RunOperatorWithKernel("sgd",
@@ -204,7 +204,7 @@ class Adam {
     RunOperator("fill_constant", {}, {{"Out", {learning_rate_}}}, attrs);
   }
 
-  void Update(VariableHandle input) {
+  void Update(ParameterHandle input) {
     PADDLE_ENFORCE(get_global_tape().HasBeenBackwarded(),
                    "optimization must happen after the backward");
     auto *hyperparams = input->MutableHyperParams("adam");
@@ -214,15 +214,15 @@ class Adam {
       attrs["shape"] = paddle::framework::vectorize2int(
           input->Get<paddle::framework::LoDTensor>().dims());
       attrs["value"] = 0.0f;
-      VariableHandle moment1(new Variable("adam"));
-      VariableHandle moment2(new Variable("adam"));
+      ParameterHandle moment1(new Parameter("adam"));
+      ParameterHandle moment2(new Parameter("adam"));
       RunOperator("fill_constant", {}, {{"Out", {moment1}}}, attrs);
       RunOperator("fill_constant", {}, {{"Out", {moment2}}}, attrs);
 
       attrs["shape"] = std::vector<int>{1};
       attrs["value"] = 1.0f;
-      VariableHandle beta1_pow(new Variable("adam"));
-      VariableHandle beta2_pow(new Variable("adam"));
+      ParameterHandle beta1_pow(new Parameter("adam"));
+      ParameterHandle beta2_pow(new Parameter("adam"));
       RunOperator("fill_constant", {}, {{"Out", {beta1_pow}}}, attrs);
       RunOperator("fill_constant", {}, {{"Out", {beta2_pow}}}, attrs);
 
