@@ -38,9 +38,9 @@ using paddle::tape::OptimizableParameters;
 using paddle::tape::CreateRecordioFileReader;
 using paddle::tape::ReadNext;
 
-TEST(Cifar, TestCPU) {
+TEST(Cifar, TestGPU) {
   // auto place = paddle::platform::CPUPlace();
-  auto place = paddle::platform::CUDAPlace(0);
+  auto place = paddle::platform::CUDAPlace(1);
   reset_global_tape(place);
 
   std::string filename1 = "/tmp/cifar10_train_128_CPUPlace.recordio";
