@@ -241,8 +241,8 @@ class Adam : public Optimizer {
       attrs["shape"] = paddle::framework::vectorize2int(
           param->Get<paddle::framework::LoDTensor>().dims());
       attrs["value"] = 0.0f;
-      VariableHandle moment1(new Variable("adam"));
-      VariableHandle moment2(new Variable("adam"));
+      ParameterHandle moment1(new Parameter("adam"));
+      ParameterHandle moment2(new Parameter("adam"));
       RunOperator("fill_constant", {}, {{"Out", {moment1}}}, attrs);
       RunOperator("fill_constant", {}, {{"Out", {moment2}}}, attrs);
 

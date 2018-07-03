@@ -152,7 +152,7 @@ void Tape::Forward() {
   VLOG(3) << "Starting forward -------------------------";
   while (current_position_ < ops_.size()) {
     PADDLE_ENFORCE(!has_been_backwarded_);
-    OpHandle &op = ops_[current_position_];
+    OpRecord &op = ops_[current_position_];
     framework::OpDesc op_desc =
         CreateOpDesc(op.type_, op.inputs_, op.outputs_, op.attrs_);
     ScopeWrapper scope(op.inputs_, op.outputs_);
@@ -162,13 +162,20 @@ void Tape::Forward() {
   VLOG(3) << "Finishing forward -------------------------";
 }
 
-void Tape::DescMapToVarMap(
-    const unordered_map<string, VariableHandle> &name2var,
-    const framework::VariableNameMap &variable_name_map,
-    VariableHandleMap *vhm,
-    vector<pair<VariableHandle, VariableHandle>> *dup_grad,
-    vector<pair<VariableHandle, VariableHandle>> *init_grad,
-    bool is_output) {
+/*
+ * Only used in backward
+ *
+ * Construct vhm based on name2var, variable_name_map
+ *
+ * During the construction, record duplicated gradient and
+ * uninitialzied gradient.
+ */
+void DescMapToVarMap(const unordered_map<string, VariableHandle> &name2var,
+                     const framework::VariableNameMap &variable_name_map,
+                     VariableHandleMap *vhm,
+                     vector<pair<VariableHandle, VariableHandle>> *dup_grad,
+                     vector<pair<VariableHandle, VariableHandle>> *init_grad,
+                     bool is_output) {
   for (auto &p2a : variable_name_map) {
     for (auto &arg : p2a.second) {
       auto &param = p2a.first;
@@ -284,7 +291,7 @@ void Tape::Backward(VariableHandle target) {
 }
 
 void GraphVizHelper(std::ostream &ss,
-                    const std::vector<OpHandle> &ops,
+                    const std::vector<OpRecord> &ops,
                     bool is_forward) {
   std::string node_prefix = is_forward ? "_op" : "op_grad";
   ss << "subgraph cluster_" << std::to_string(is_forward ? 0 : 1) << " {\n";

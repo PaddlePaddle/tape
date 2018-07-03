@@ -97,15 +97,6 @@ class Variable {
     return var_.GetMutable<T>();
   }
 
-  // TODO(tonyyang-svail): move MutableHyperParams to parameter.h
-  std::vector<VariableHandle> *MutableHyperParams(
-      const std::string &optimizer) {
-    PADDLE_ENFORCE(hyperparams_.find(optimizer) != hyperparams_.end(),
-                   "%s optimizer is not supported",
-                   optimizer);
-    return &hyperparams_[optimizer];
-  }
-
  private:
   int64_t count() {
     static int64_t counter = 0;
@@ -117,15 +108,10 @@ class Variable {
 
   // Not own
   std::weak_ptr<Variable> grad_;
-
-  // Optimizer hyperparameters
-  // TODO(tonyyang-svail): move hyperparameters to parameter.h
-  std::unordered_map<std::string, std::vector<VariableHandle>> hyperparams_{
-      {"adam", {}}};
 };
 
-struct OpHandle {
-  OpHandle(const std::string &type,
+struct OpRecord {
+  OpRecord(const std::string &type,
            const VariableHandleMap &in_vars,
            const VariableHandleMap &out_vars,
            const framework::AttributeMap &attrs)
@@ -152,32 +138,16 @@ class Tape {
 
   bool HasBeenBackwarded() { return has_been_backwarded_; }
 
-  std::string GraphVizString(bool with_backward = true);
+  std::string GraphVizString(bool print_backward = true);
 
   const platform::Place &Place() { return place_; }
 
  private:
-  /*
-   * Only used in backward
-   *
-   * Construct vhm based on name2var, variable_name_map
-   *
-   * During the construction, record duplicated gradient and
-   * uninitialzied gradient.
-   */
-  void DescMapToVarMap(
-      const std::unordered_map<std::string, VariableHandle> &name2var,
-      const framework::VariableNameMap &variable_name_map,
-      VariableHandleMap *vhm,
-      std::vector<std::pair<VariableHandle, VariableHandle>> *dup_grad,
-      std::vector<std::pair<VariableHandle, VariableHandle>> *init_grad,
-      bool is_output);
-
   bool has_been_backwarded_ = false;
   size_t current_position_ = 0;
   platform::Place place_;
 
-  std::vector<OpHandle> ops_;
+  std::vector<OpRecord> ops_;
   std::shared_ptr<Tape> backward_tape_;
 };
 

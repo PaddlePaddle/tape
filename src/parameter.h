@@ -32,6 +32,18 @@ class Parameter : public Variable {
   explicit Parameter(const std::string &name,
                      Variable::Suffix suffix = Variable::Suffix::COUNT)
       : Variable(name, suffix) {}
+
+  std::vector<ParameterHandle> *MutableHyperParams(
+      const std::string &optimizer) {
+    PADDLE_ENFORCE(hyperparams_.find(optimizer) != hyperparams_.end(),
+                   "%s optimizer is not supported",
+                   optimizer);
+    return &hyperparams_[optimizer];
+  }
+
+ private:
+  std::unordered_map<std::string, std::vector<ParameterHandle>> hyperparams_{
+      {"adam", {}}};
 };
 
 class ParameterCollection {
