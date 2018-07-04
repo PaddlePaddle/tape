@@ -83,6 +83,9 @@ class Linear {
         "LinearBias", "fill_constant", attrs);
   }
 
+  Linear(const std::vector<ParameterHandle> &params, const std::string &act)
+      : act_(act), w_(params[0]), b_(params[1]) {}
+
   VariableHandle operator()(VariableHandle input,
                             const framework::AttributeMap &mul_op_attrs = {},
                             const framework::AttributeMap &add_op_attrs = {}) {
@@ -105,7 +108,9 @@ class Linear {
     return post_act;
   }
 
-  std::vector<ParameterHandle> Params() { return {w_, b_}; }
+  std::vector<std::string> ParamNames() { return {w_->Name(), b_->Name()}; }
+
+  std::string ActName() { return act_; }
 
  private:
   ParameterHandle w_;
@@ -135,6 +140,10 @@ class Convolution2D {
         "ConvolutionBias", "fill_constant", attrs);
   }
 
+  Convolution2D(const std::vector<ParameterHandle> &params,
+                const std::string &act)
+      : act_(act), w_(params[0]), b_(params[1]) {}
+
   VariableHandle operator()(
       VariableHandle input,
       const framework::AttributeMap &conv_op_attrs = {{"paddings",
@@ -160,7 +169,9 @@ class Convolution2D {
     return post_act;
   }
 
-  std::vector<ParameterHandle> Params() { return {w_, b_}; }
+  std::vector<std::string> ParamNames() { return {w_->Name(), b_->Name()}; }
+
+  std::string ActName() { return act_; }
 
  private:
   ParameterHandle w_;
@@ -191,6 +202,13 @@ class BatchNorm {
     GlobalParameterCollection().MarkNoGrad(mean_->Name());
   }
 
+  BatchNorm(const std::vector<ParameterHandle> &params, const std::string &act)
+      : act_(act),
+        scale_(params[0]),
+        bias_(params[1]),
+        mean_(params[2]),
+        variance_(params[3]) {}
+
   VariableHandle operator()(VariableHandle x,
                             const framework::AttributeMap &attrs = {}) {
     VariableHandle pre_act(new Variable("batch_norm"));
@@ -217,8 +235,11 @@ class BatchNorm {
     return post_act;
   }
 
-  // Only scale and bias need to be updated by SGD
-  std::vector<ParameterHandle> Params() { return {scale_, bias_}; }
+  std::vector<std::string> ParamNames() {
+    return {scale_->Name(), bias_->Name(), mean_->Name(), variance_->Name()};
+  }
+
+  std::string ActName() { return act_; }
 
  private:
   ParameterHandle scale_;

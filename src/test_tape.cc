@@ -33,6 +33,23 @@ using paddle::tape::get_global_tape;
 using paddle::tape::CreateRecordioFileReader;
 using paddle::tape::ReadNext;
 using paddle::tape::BackwardAndUpdate;
+using paddle::framework::LoDTensor;
+using paddle::tape::ParameterCollection;
+using paddle::tape::ParameterHandle;
+using paddle::tape::GlobalParameterCollection;
+
+template <typename T>
+bool EnforceClose(ParameterHandle p1, ParameterHandle p2, T epsilon) {
+  auto& t1 = p1->Get<LoDTensor>();
+  auto& t2 = p2->Get<LoDTensor>();
+
+  PADDLE_ENFORCE(t1.numel() == t2.numel());
+  for (int i = 0; i < t1.numel(); ++i) {
+    T d1 = t1.data<T>()[i], d2 = t2.data<T>()[i];
+    PADDLE_ENFORCE(d1 - d2 <= epsilon);
+    PADDLE_ENFORCE(d2 - d1 <= epsilon);
+  }
+}
 
 TEST(Tape, TestDropout) {
   std::string initializer = "uniform_random";
@@ -143,6 +160,7 @@ TEST(Tape, TestConv) {
 
     auto input = filler();
     auto loss = mean(conv2(conv1(input)));
+    LOG(INFO) << loss->Value();
 
     BackwardAndUpdate(loss, &adam);
   }
@@ -167,12 +185,43 @@ TEST(Tape, TestMLP) {
     reset_global_tape();
 
     auto input = filler();
-
     auto loss = mean(linear2(linear1(input)));
     LOG(INFO) << loss->Value();
 
     BackwardAndUpdate(loss, &sgd);
   }
+}
+
+TEST(Tape, TestSaveLoadLayer) {
+  std::string file_path = "/tmp/test_layer_save_load/";
+  Linear linear1(3, 6, "relu");
+  Linear linear2(6, 3);
+
+  auto& global_pc = GlobalParameterCollection();
+  global_pc.SaveAllParameters(file_path);
+
+  ParameterCollection loaded_pc(file_path);
+  PADDLE_ENFORCE_EQ(global_pc.OptimizableParameters().size(),
+                    loaded_pc.OptimizableParameters().size());
+
+  Linear loaded_linear1(loaded_pc.LookUp(linear1.ParamNames()),
+                        linear1.ActName());
+  Linear loaded_linear2(loaded_pc.LookUp(linear2.ParamNames()),
+                        linear2.ActName());
+
+  for (size_t i = 0; i < global_pc.OptimizableParameters().size(); ++i) {
+    auto old_param = global_pc.OptimizableParameters()[i];
+    auto new_param = loaded_pc.OptimizableParameters()[i];
+    EnforceClose<float>(old_param, new_param, 0.0001);
+    PADDLE_ENFORCE_NE(old_param.get(),
+                      new_param.get(),
+                      "Loaded parameter should be in different memory");
+  }
+
+  PADDLE_ENFORCE_EQ(linear1.ActName(), loaded_linear1.ActName());
+  PADDLE_ENFORCE_EQ(linear2.ActName(), loaded_linear2.ActName());
+
+  PADDLE_ENFORCE_EQ(system(std::string("rm -r " + file_path).c_str()), 0);
 }
 
 int main(int argc, char** argv) {
