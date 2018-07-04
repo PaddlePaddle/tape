@@ -15,4 +15,4 @@
 
 cc_test(test_cifar
         SRCS test_cifar.cc
-        DEPS tape tape_function)
+        DEPS tape tape_function tape_optimizer)

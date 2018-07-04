@@ -48,6 +48,7 @@ include_directories(${CMAKE_BINARY_DIR}/third_party/eigen3/src/extern_eigen3)
 
 cc_library(tape SRCS variable.cc tape.cc backward.cc DEPS ${GLOB_OP_LIB})
 cc_library(tape_parameter SRCS parameter.cc DEPS tape)
+cc_library(tape_optimizer SRCS optimizer.cc DEPS tape tape_parameter)
 cc_library(tape_function SRCS function.cc DEPS ${GLOB_OP_LIB} tape tape_parameter)
 
 cc_test(test_parameter
@@ -55,7 +56,7 @@ cc_test(test_parameter
         DEPS tape_parameter)
 cc_test(test_tape
         SRCS test_tape.cc
-        DEPS tape tape_function)
+        DEPS tape tape_function tape_optimizer)
 cc_test(test_backward
         SRCS test_backward.cc
         DEPS tape tape_function)
