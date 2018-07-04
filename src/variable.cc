@@ -37,6 +37,35 @@ std::ostream& operator<<(std::ostream& os, const Variable& var) {
   return os;
 }
 
+int64_t count() {
+  static int64_t counter = 0;
+  return counter++;
+}
+
+Variable::Variable(const std::string& pre_fix) {
+  name_ = pre_fix + std::to_string(count());
+}
+
+Variable::Variable(const std::string& pre_fix, Suffix suffix) {
+  if (suffix == Suffix::COUNT) {
+    name_ = pre_fix + std::to_string(count());
+  } else if (suffix == Suffix::GRAD) {
+    name_ = pre_fix + framework::kGradVarSuffix;
+  } else {
+    name_ = pre_fix;
+  }
+}
+
+VariableHandle Variable::Grad() {
+  if (grad_.expired()) {
+    VariableHandle new_grad(new Variable(name_, Suffix::GRAD));
+    grad_ = new_grad;
+    return new_grad;
+  } else {
+    return VariableHandle(grad_);
+  }
+}
+
 VariableHandle Variable::FetchValue() {
   get_global_tape().Forward();
   auto place = this->Get<framework::LoDTensor>().place();
