@@ -20,7 +20,6 @@
 using paddle::framework::LoDTensor;
 using paddle::tape::ParameterCollection;
 using paddle::tape::ParameterHandle;
-using paddle::tape::GlobalParameterCollection;
 
 template <typename T>
 bool EnforceClose(ParameterHandle p1, ParameterHandle p2, T epsilon) {
