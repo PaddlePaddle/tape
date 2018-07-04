@@ -31,11 +31,15 @@ using paddle::tape::reset_global_tape;
 using paddle::tape::get_global_tape;
 using paddle::tape::OptimizableParameters;
 using paddle::tape::BackwardAndUpdate;
+using paddle::tape::ParameterCollection;
+using paddle::tape::ParameterHandle;
+using paddle::tape::GlobalParameterCollection;
 
 using paddle::tape::CreateRecordioFileReader;
 using paddle::tape::ReadNext;
 
 TEST(Mnist, TestCPU) {
+  std::string save_model_path = "/tmp/mnist_model/";
   std::string filename1 = "/tmp/mnist_train.recordio";
   std::string filename2 = "/tmp/mnist_test.recordio";
   auto train_reader = CreateRecordioFileReader(
@@ -56,6 +60,7 @@ TEST(Mnist, TestCPU) {
   int print_step = 100;
   float threshold = 0.90f;
 
+  // Training
   for (int i = 0; i < total_steps; ++i) {
     reset_global_tape();
     auto data_label = ReadNext(train_reader, true);
@@ -109,11 +114,59 @@ TEST(Mnist, TestCPU) {
                 << ", Avg accuracy is " << avg_accu;
 
       if (avg_accu >= threshold) {
-        LOG(INFO) << "Meets target accuracy, stop training";
+        LOG(INFO) << "Meets target accuracy, stop training and save parameters";
+        GlobalParameterCollection().SaveAllParameters(save_model_path);
         break;
       }
     }
   }
+
+  // Inference using test set
+  LOG(INFO) << "Start inferencing and load parameters";
+  ParameterCollection loaded_pc(save_model_path);
+  Linear inf_linear1(loaded_pc.LookUp(linear1.ParamNames()), linear1.ActName());
+  Linear inf_linear2(loaded_pc.LookUp(linear2.ParamNames()), linear2.ActName());
+  Linear inf_linear3(loaded_pc.LookUp(linear3.ParamNames()), linear3.ActName());
+
+  auto inference = [&](VariableHandle input) -> VariableHandle {
+    return inf_linear3(inf_linear2(inf_linear1(input)));
+  };
+
+  std::vector<float> losses;
+  std::vector<float> accuracies;
+
+  while (true) {
+    reset_global_tape();
+
+    auto data_label = ReadNext(test_reader, false);
+    if (data_label.empty()) {
+      break;
+    }
+
+    auto data = data_label[0];
+    auto label = data_label[1];
+
+    auto predict = inference(data);
+    auto loss = mean(cross_entropy(predict, label));
+    auto precision = accuracy(predict, label);
+
+    get_global_tape().Forward();
+
+    losses.push_back(
+        loss->Get<paddle::framework::LoDTensor>().data<float>()[0]);
+    accuracies.push_back(
+        precision->Get<paddle::framework::LoDTensor>().data<float>()[0]);
+  }
+
+  float avg_loss =
+      std::accumulate(losses.begin(), losses.end(), 0.0f) / losses.size();
+  float avg_accu = std::accumulate(accuracies.begin(), accuracies.end(), 0.0f) /
+                   accuracies.size();
+
+  LOG(INFO) << "Inference on test set result: Avg loss is " << avg_loss
+            << ", Avg accuracy is " << avg_accu;
+
+  PADDLE_ENFORCE_EQ(system(std::string("rm -r " + save_model_path).c_str()), 0);
 }
 
 int main(int argc, char** argv) {
