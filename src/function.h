@@ -83,6 +83,9 @@ class Linear {
         "LinearBias", "fill_constant", attrs);
   }
 
+  Linear(const std::vector<ParameterHandle> &params, const std::string &act)
+      : act_(act), w_(params[0]), b_(params[1]) {}
+
   VariableHandle operator()(VariableHandle input,
                             const framework::AttributeMap &mul_op_attrs = {},
                             const framework::AttributeMap &add_op_attrs = {}) {
@@ -105,7 +108,11 @@ class Linear {
     return post_act;
   }
 
+  std::vector<std::string> ParamNames() { return {w_->Name(), b_->Name()}; }
+
   std::vector<ParameterHandle> Params() { return {w_, b_}; }
+
+  std::string ActName() { return act_; }
 
  private:
   ParameterHandle w_;
