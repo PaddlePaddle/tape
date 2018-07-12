@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <chrono>
 #include <numeric>
 #include <vector>
 
@@ -49,12 +50,12 @@ TEST(Cifar, TestGPU) {
   reset_global_tape(place);
 
   std::string save_model_path = "/tmp/cifar_model/";
-  std::string filename1 = "/tmp/cifar10_train_128_CPUPlace.recordio";
-  std::string filename2 = "/tmp/cifar10_test_128_CPUPlace.recordio";
-  auto train_reader = CreateRecordioFileReader(
-      filename1, {128, 3, 32, 32, 128, 1}, {4, 2}, {0, 0});
-  auto test_reader = CreateRecordioFileReader(
-      filename2, {128, 3, 32, 32, 128, 1}, {4, 2}, {0, 0});
+  std::string filename1 = "/tmp/cifar10_train_1_CPUPlace.recordio";
+  std::string filename2 = "/tmp/cifar10_test_1_CPUPlace.recordio";
+  auto train_reader =
+      CreateRecordioFileReader(filename1, {1, 3, 32, 32, 1, 1}, {4, 2}, {0, 0});
+  auto test_reader =
+      CreateRecordioFileReader(filename2, {1, 3, 32, 32, 1, 1}, {4, 2}, {0, 0});
 
   // input 3x32x32
   // after conv1_1   64x32x32
@@ -147,9 +148,10 @@ TEST(Cifar, TestGPU) {
 
   int total_steps = 10000;
   int test_steps = 1000;
-  int print_step = 100;
-  float threshold = 0.6f;
+  int print_step = 1000;
+  float threshold = 0.88f;
 
+  auto start = std::chrono::system_clock::now();
   // Training
   for (int i = 0; i < total_steps; ++i) {
     LOG(INFO) << "Train step #" << i;
@@ -164,6 +166,10 @@ TEST(Cifar, TestGPU) {
     auto precision = accuracy(predict, label);
 
     BackwardAndUpdate(loss, &adam);
+
+    if (i >= 499) {
+      break;
+    }
 
     // Every time certain amount of batches have been processed,
     // we test the average loss and accuracy on the test data set,
@@ -216,6 +222,13 @@ TEST(Cifar, TestGPU) {
       }
     }
   }
+
+  auto end = std::chrono::system_clock::now();
+  std::chrono::duration<double> elapsed_time = end - start;
+  LOG(INFO) << "Total wall clock time for 100 iterations is "
+            << elapsed_time.count() << " seconds";
+
+  return;
 
   // Inference using test set
   LOG(INFO) << "Start inferencing and load parameters";
