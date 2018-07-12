@@ -122,7 +122,7 @@ def train(net_type, use_cuda):
     optimizer = fluid.optimizer.Adam(learning_rate=0.001)
     optimizer.minimize(avg_cost)
 
-    BATCH_SIZE = 1
+    BATCH_SIZE = 128
 
     # train_reader = paddle.batch(
     #     paddle.reader.shuffle(
@@ -147,14 +147,16 @@ def train(net_type, use_cuda):
     start = time()
     count = 0
 
+    iters = 4
+
     for i in range(PASS):
         for batch_id, data in enumerate(train_reader()):
             exe.run(fluid.default_main_program(), feed=feeder.feed(data))
             count += 1
             print(count)
-            if count >= 500:
+            if count >= iters:
                 break
-        if count >= 500:
+        if count >= iters:
             break
 
     end = time()

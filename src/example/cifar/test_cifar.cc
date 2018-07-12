@@ -46,7 +46,7 @@ using paddle::tape::ReadNext;
 
 TEST(Cifar, TestGPU) {
   // auto place = paddle::platform::CPUPlace();
-  auto place = paddle::platform::CUDAPlace(1);
+  auto place = paddle::platform::CUDAPlace(0);
   reset_global_tape(place);
 
   std::string save_model_path = "/tmp/cifar_model/";
@@ -167,7 +167,7 @@ TEST(Cifar, TestGPU) {
 
     BackwardAndUpdate(loss, &adam);
 
-    if (i >= 499) {
+    if (i >= 3) {
       break;
     }
 

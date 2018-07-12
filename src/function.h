@@ -274,7 +274,8 @@ VariableHandle accuracy(VariableHandle prediction,
 
 VariableHandle pool2d(VariableHandle x,
                       const framework::AttributeMap &attrs = {
-                          {"strides", std::vector<int>{2, 2}}}) {
+                          {"strides", std::vector<int>{2, 2}},
+                          {"use_cudnn", true}}) {
   VariableHandle out(new Variable("pool2d"));
   get_global_tape().AddOp("pool2d", {{"X", {x}}}, {{"Out", {out}}}, attrs);
   return out;
