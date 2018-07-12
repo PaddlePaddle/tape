@@ -50,12 +50,12 @@ TEST(Cifar, TestGPU) {
   reset_global_tape(place);
 
   std::string save_model_path = "/tmp/cifar_model/";
-  std::string filename1 = "/tmp/cifar10_train_1_CPUPlace.recordio";
-  std::string filename2 = "/tmp/cifar10_test_1_CPUPlace.recordio";
-  auto train_reader =
-      CreateRecordioFileReader(filename1, {1, 3, 32, 32, 1, 1}, {4, 2}, {0, 0});
-  auto test_reader =
-      CreateRecordioFileReader(filename2, {1, 3, 32, 32, 1, 1}, {4, 2}, {0, 0});
+  std::string filename1 = "/tmp/cifar10_train_128_CPUPlace.recordio";
+  std::string filename2 = "/tmp/cifar10_test_128_CPUPlace.recordio";
+  auto train_reader = CreateRecordioFileReader(
+      filename1, {128, 3, 32, 32, 128, 1}, {4, 2}, {0, 0});
+  auto test_reader = CreateRecordioFileReader(
+      filename2, {128, 3, 32, 32, 128, 1}, {4, 2}, {0, 0});
 
   // input 3x32x32
   // after conv1_1   64x32x32
