@@ -135,19 +135,19 @@ def train(net_type, use_cuda):
     test_reader = paddle.batch(
         paddle.dataset.cifar.test10(), batch_size=BATCH_SIZE)
 
-    place = fluid.CUDAPlace(1) if use_cuda else fluid.CPUPlace()
+    place = fluid.CUDAPlace(0) if use_cuda else fluid.CPUPlace()
     exe = fluid.Executor(place)
     feeder = fluid.DataFeeder(place=place, feed_list=[images, label])
 
     exe.run(fluid.default_startup_program())
 
-    PASS = 100
+    PASS = 1000
 
     print('start')
     start = time()
     count = 0
 
-    iters = 4
+    iters = 500
 
     for i in range(PASS):
         for batch_id, data in enumerate(train_reader()):
@@ -160,7 +160,7 @@ def train(net_type, use_cuda):
             break
 
     end = time()
-    print('Takes {} seconds wall clock time'.format(end - start))
+    print('{} iteratios takes {} seconds wall clock time'.format(iters, end - start))
 
 
 if __name__ == '__main__':

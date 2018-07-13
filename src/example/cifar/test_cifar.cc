@@ -150,6 +150,7 @@ TEST(Cifar, TestGPU) {
   int test_steps = 1000;
   int print_step = 1000;
   float threshold = 0.88f;
+  int iter_num = 499;
 
   auto start = std::chrono::system_clock::now();
   // Training
@@ -167,7 +168,7 @@ TEST(Cifar, TestGPU) {
 
     BackwardAndUpdate(loss, &adam);
 
-    if (i >= 3) {
+    if (i >= iter_num) {
       break;
     }
 
@@ -225,8 +226,8 @@ TEST(Cifar, TestGPU) {
 
   auto end = std::chrono::system_clock::now();
   std::chrono::duration<double> elapsed_time = end - start;
-  LOG(INFO) << "Total wall clock time for 100 iterations is "
-            << elapsed_time.count() << " seconds";
+  LOG(INFO) << "Total wall clock time for iteration num " <<  (iter_num + 1)
+            << " is " << elapsed_time.count() << " seconds";
 
   return;
 
