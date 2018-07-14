@@ -101,12 +101,30 @@ def vgg16_bn_drop(input):
     return fc2
 
 
-def train(net_type, use_cuda):
+def train(net_type, use_cuda, use_reader_op):
     classdim = 10
     data_shape = [3, 32, 32]
+    BATCH_SIZE = 128
 
-    images = fluid.layers.data(name='pixel', shape=data_shape, dtype='float32')
-    label = fluid.layers.data(name='label', shape=[1], dtype='int64')
+    train_file_path = "/tmp/cifar10_train_1_CPUPlace.recordio"
+
+    if use_reader_op:
+        print("use reader op from {}".format(train_file_path))
+        train_data_file = fluid.layers.open_files(
+            filenames=train_file_path,
+            shapes=[[-1, 3, 32, 32], [-1, 1]],
+            lod_levels=[0, 0],
+            dtypes=["float32", "int64"],
+            pass_num=100,
+            for_parallel=False)
+        train_data_file = fluid.layers.double_buffer(
+            fluid.layers.batch(
+                train_data_file, batch_size=BATCH_SIZE))
+        images, label = fluid.layers.read_file(train_data_file)
+    else:
+        images = fluid.layers.data(
+            name='pixel', shape=data_shape, dtype='float32')
+        label = fluid.layers.data(name='label', shape=[1], dtype='int64')
 
     if net_type == "vgg":
         print("train vgg net")
@@ -122,8 +140,6 @@ def train(net_type, use_cuda):
     optimizer = fluid.optimizer.Adam(learning_rate=0.001)
     optimizer.minimize(avg_cost)
 
-    BATCH_SIZE = 128
-
     # train_reader = paddle.batch(
     #     paddle.reader.shuffle(
     #         paddle.dataset.cifar.train10(), buf_size=BATCH_SIZE * 10),
@@ -137,31 +153,45 @@ def train(net_type, use_cuda):
 
     place = fluid.CUDAPlace(0) if use_cuda else fluid.CPUPlace()
     exe = fluid.Executor(place)
-    feeder = fluid.DataFeeder(place=place, feed_list=[images, label])
+
+    if not use_reader_op:
+        feeder = fluid.DataFeeder(place=place, feed_list=[images, label])
 
     exe.run(fluid.default_startup_program())
 
     PASS = 1000
-
-    print('start')
-    start = time()
-    count = 0
-
     iters = 500
 
-    for i in range(PASS):
-        for batch_id, data in enumerate(train_reader()):
-            exe.run(fluid.default_main_program(), feed=feeder.feed(data))
-            count += 1
-            print(count)
-            if count >= iters:
+    print('start')
+
+    iter_num, num_samples, start = 0, 0, time()
+    for pass_id in range(PASS):
+        if not use_reader_op:
+            reader_generator = train_reader()
+        data = None
+        while True:
+            if not use_reader_op:
+                data = next(reader_generator, None)
+                if data is None:
+                    break
+            if iter_num == iters:
                 break
-        if count >= iters:
+            if use_reader_op:
+                try:
+                    exe.run(fluid.default_main_program())
+                except fluid.core.EnforceNotMet as ex:
+                    break
+            else:
+                exe.run(fluid.default_main_program(), feed=feeder.feed(data))
+            iter_num += 1
+            print("Pass: %d, Iter: %d" % (pass_id, iter_num))
+        if iter_num == iters:
             break
 
     end = time()
-    print('{} iteratios takes {} seconds wall clock time'.format(iters, end - start))
+    print('{} iteratios takes {} seconds wall clock time'.format(iters, end -
+                                                                 start))
 
 
 if __name__ == '__main__':
-    train('vgg', use_cuda=True)
+    train('vgg', use_cuda=True, use_reader_op=True)
