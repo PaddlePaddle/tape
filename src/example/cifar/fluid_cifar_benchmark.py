@@ -107,20 +107,22 @@ def train(net_type, use_cuda, use_reader_op):
     BATCH_SIZE = 128
     print("Batch size is {}".format(BATCH_SIZE))
 
-    train_file_path = "/tmp/cifar10_train_1_CPUPlace.recordio"
+    train_file_path = "/tmp/cifar10_train_" + str(
+        BATCH_SIZE) + "_CPUPlace.recordio"
 
     if use_reader_op:
         print("use reader op from {}".format(train_file_path))
         train_data_file = fluid.layers.open_files(
             filenames=train_file_path,
-            shapes=[[-1, 3, 32, 32], [-1, 1]],
+            shapes=[[BATCH_SIZE, 3, 32, 32], [BATCH_SIZE, 1]],
             lod_levels=[0, 0],
             dtypes=["float32", "int64"],
             pass_num=100,
             for_parallel=False)
-        train_data_file = fluid.layers.double_buffer(
-            fluid.layers.batch(
-                train_data_file, batch_size=BATCH_SIZE))
+        train_data_file = fluid.layers.double_buffer(train_data_file)
+        # train_data_file = fluid.layers.double_buffer(
+        #     fluid.layers.batch(
+        #         train_data_file, batch_size=BATCH_SIZE))
         images, label = fluid.layers.read_file(train_data_file)
     else:
         images = fluid.layers.data(

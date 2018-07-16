@@ -52,9 +52,7 @@ def create_cifar_recordio_files(batch_size=32, place=fluid.CPUPlace()):
 
 
 if __name__ == "__main__":
-    create_cifar_recordio_files(4)
-    create_cifar_recordio_files(4)
-    create_cifar_recordio_files(32)
-    create_cifar_recordio_files(32)
-    create_cifar_recordio_files(64)
-    create_cifar_recordio_files(64)
+    batch_size = 1
+    while batch_size <= 512:
+        create_cifar_recordio_files(batch_size)
+        batch_size *= 2
