@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <chrono>
+#include <chrono>  // NOLINT
 #include <numeric>
+#include <string>
 #include <vector>
 
 #include "gtest/gtest.h"
@@ -49,13 +50,17 @@ TEST(Cifar, TestGPU) {
   auto place = paddle::platform::CUDAPlace(0);
   reset_global_tape(place);
 
+  const int batch_size = 128;
+  LOG(INFO) << "Batch size is " << batch_size << std::endl;
   std::string save_model_path = "/tmp/cifar_model/";
-  std::string filename1 = "/tmp/cifar10_train_128_CPUPlace.recordio";
-  std::string filename2 = "/tmp/cifar10_test_128_CPUPlace.recordio";
+  std::string filename1 =
+      "/tmp/cifar10_train_" + std::to_string(batch_size) + "_CPUPlace.recordio";
+  std::string filename2 =
+      "/tmp/cifar10_test_" + std::to_string(batch_size) + "_CPUPlace.recordio";
   auto train_reader = CreateRecordioFileReader(
-      filename1, {128, 3, 32, 32, 128, 1}, {4, 2}, {0, 0});
+      filename1, {batch_size, 3, 32, 32, batch_size, 1}, {4, 2}, {0, 0});
   auto test_reader = CreateRecordioFileReader(
-      filename2, {128, 3, 32, 32, 128, 1}, {4, 2}, {0, 0});
+      filename2, {batch_size, 3, 32, 32, batch_size, 1}, {4, 2}, {0, 0});
 
   // input 3x32x32
   // after conv1_1   64x32x32
@@ -148,14 +153,25 @@ TEST(Cifar, TestGPU) {
 
   int total_steps = 10000;
   int test_steps = 1000;
-  int print_step = 1000;
+  int print_step = 2000;
   float threshold = 0.88f;
-  int iter_num = 499;
+  int iter_num = 1050;
+  int skip_batch_num = 50;
 
   auto start = std::chrono::system_clock::now();
+  int num_samples = 0;
   // Training
   for (int i = 0; i < total_steps; ++i) {
     LOG(INFO) << "Train step #" << i;
+
+    if (i == iter_num) {
+      break;
+    }
+
+    if (i == skip_batch_num) {
+      start = std::chrono::system_clock::now();
+      num_samples = 0;
+    }
 
     reset_global_tape(place);
     auto data_label = ReadNext(train_reader, true);
@@ -168,9 +184,7 @@ TEST(Cifar, TestGPU) {
 
     BackwardAndUpdate(loss, &adam);
 
-    if (i >= iter_num) {
-      break;
-    }
+    num_samples += batch_size;
 
     // Every time certain amount of batches have been processed,
     // we test the average loss and accuracy on the test data set,
@@ -226,8 +240,11 @@ TEST(Cifar, TestGPU) {
 
   auto end = std::chrono::system_clock::now();
   std::chrono::duration<double> elapsed_time = end - start;
-  LOG(INFO) << "Total wall clock time for iteration num " <<  (iter_num + 1)
-            << " is " << elapsed_time.count() << " seconds";
+  LOG(INFO) << "Total wall clock time for iteration num " << (iter_num + 1)
+            << " is " << elapsed_time.count() << " seconds" << std::endl;
+  LOG(INFO) << "Total samples: " << num_samples
+            << "; Throughput: " << num_samples / elapsed_time.count()
+            << std::endl;
 
   return;
 

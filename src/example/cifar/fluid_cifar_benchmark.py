@@ -105,6 +105,7 @@ def train(net_type, use_cuda, use_reader_op):
     classdim = 10
     data_shape = [3, 32, 32]
     BATCH_SIZE = 128
+    print("Batch size is {}".format(BATCH_SIZE))
 
     train_file_path = "/tmp/cifar10_train_1_CPUPlace.recordio"
 
@@ -160,7 +161,8 @@ def train(net_type, use_cuda, use_reader_op):
     exe.run(fluid.default_startup_program())
 
     PASS = 1000
-    iters = 500
+    iters = 1050
+    skip_batch_num = 50
 
     print('start')
 
@@ -176,6 +178,9 @@ def train(net_type, use_cuda, use_reader_op):
                     break
             if iter_num == iters:
                 break
+            if iter_num == skip_batch_num:
+                start = time()
+                num_samples = 0
             if use_reader_op:
                 try:
                     exe.run(fluid.default_main_program())
@@ -184,13 +189,20 @@ def train(net_type, use_cuda, use_reader_op):
             else:
                 exe.run(fluid.default_main_program(), feed=feeder.feed(data))
             iter_num += 1
+            if use_reader_op:
+                num_samples += BATCH_SIZE
+            else:
+                num_samples += len(data)
             print("Pass: %d, Iter: %d" % (pass_id, iter_num))
         if iter_num == iters:
             break
 
     end = time()
-    print('{} iteratios takes {} seconds wall clock time'.format(iters, end -
-                                                                 start))
+    elapsed_time = end - start
+    print('{} iteratios takes {} seconds wall clock time'.format(
+        iters - skip_batch_num, elapsed_time))
+    print('Total examples: %d; Throughput: %.5f examples per sec' %
+          (num_samples, num_samples / elapsed_time))
 
 
 if __name__ == '__main__':
