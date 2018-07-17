@@ -17,10 +17,10 @@ import paddle.fluid as fluid
 import paddle.dataset.cifar as cifar
 
 
-def create_cifar_recordio_files(batch_size=32, place=fluid.CPUPlace()):
+def create_cifar_recordio_files():
     # Convert cifar training set to recordio files
     with fluid.program_guard(fluid.Program(), fluid.Program()):
-        reader = paddle.batch(cifar.train10(), batch_size=batch_size)
+        reader = paddle.batch(cifar.train10(), batch_size=1)
         feeder = fluid.DataFeeder(
             feed_list=[  # order is image and label
                 fluid.layers.data(
@@ -28,15 +28,13 @@ def create_cifar_recordio_files(batch_size=32, place=fluid.CPUPlace()):
                 fluid.layers.data(
                     name='label', shape=[1], dtype='int64'),
             ],
-            place=place)
-        filename = '/tmp/cifar10_train_' + str(batch_size) + "_" + str(
-            place) + '.recordio'
-        fluid.recordio_writer.convert_reader_to_recordio_file(filename, reader,
-                                                              feeder)
+            place=fluid.CPUPlace())
+        fluid.recordio_writer.convert_reader_to_recordio_file(
+            '/tmp/cifar10_train.recordio', reader, feeder)
 
     # Convert cifar testing set to recordio files
     with fluid.program_guard(fluid.Program(), fluid.Program()):
-        reader = paddle.batch(cifar.test10(), batch_size=batch_size)
+        reader = paddle.batch(cifar.test10(), batch_size=1)
         feeder = fluid.DataFeeder(
             feed_list=[  # order is image and label
                 fluid.layers.data(
@@ -44,15 +42,10 @@ def create_cifar_recordio_files(batch_size=32, place=fluid.CPUPlace()):
                 fluid.layers.data(
                     name='label', shape=[1], dtype='int64'),
             ],
-            place=place)
-        filename = '/tmp/cifar10_test_' + str(batch_size) + "_" + str(
-            place) + '.recordio'
-        fluid.recordio_writer.convert_reader_to_recordio_file(filename, reader,
-                                                              feeder)
+            place=fluid.CPUPlace())
+        fluid.recordio_writer.convert_reader_to_recordio_file(
+            '/tmp/cifar10_test.recordio', reader, feeder)
 
 
 if __name__ == "__main__":
-    batch_size = 1
-    while batch_size <= 512:
-        create_cifar_recordio_files(batch_size)
-        batch_size *= 2
+    create_cifar_recordio_files()

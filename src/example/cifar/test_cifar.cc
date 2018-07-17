@@ -43,6 +43,8 @@ using paddle::tape::ParameterHandle;
 using paddle::tape::GlobalParameterCollection;
 
 using paddle::tape::CreateRecordioFileReader;
+using paddle::tape::CreateBatchReader;
+using paddle::tape::CreateDoubleBufferReader;
 using paddle::tape::ReadNext;
 
 TEST(Cifar, TestGPU) {
@@ -52,15 +54,18 @@ TEST(Cifar, TestGPU) {
 
   const int batch_size = 128;
   LOG(INFO) << "Batch size is " << batch_size << std::endl;
+
   std::string save_model_path = "/tmp/cifar_model/";
-  std::string filename1 =
-      "/tmp/cifar10_train_" + std::to_string(batch_size) + "_CPUPlace.recordio";
-  std::string filename2 =
-      "/tmp/cifar10_test_" + std::to_string(batch_size) + "_CPUPlace.recordio";
+  std::string filename1 = "/tmp/cifar10_train.recordio";
+  std::string filename2 = "/tmp/cifar10_test.recordio";
   auto train_reader = CreateRecordioFileReader(
-      filename1, {batch_size, 3, 32, 32, batch_size, 1}, {4, 2}, {0, 0});
+      filename1, {-1, 3, 32, 32, -1, 1}, {4, 2}, {0, 0});
   auto test_reader = CreateRecordioFileReader(
-      filename2, {batch_size, 3, 32, 32, batch_size, 1}, {4, 2}, {0, 0});
+      filename2, {-1, 3, 32, 32, -1, 1}, {4, 2}, {0, 0});
+  train_reader =
+      CreateDoubleBufferReader(CreateBatchReader(train_reader, batch_size));
+  test_reader =
+      CreateDoubleBufferReader(CreateBatchReader(test_reader, batch_size));
 
   // input 3x32x32
   // after conv1_1   64x32x32
@@ -151,12 +156,13 @@ TEST(Cifar, TestGPU) {
     return fc3(fc2(dropout(temp6, d_attrs)));
   };
 
-  int total_steps = 10000;
+  int total_steps = 100000;
   int test_steps = 1000;
   int print_step = 2000;
-  float threshold = 0.88f;
+  float threshold = 0.9f;
   int iter_num = 1050;
   int skip_batch_num = 50;
+  bool model_saved = false;
 
   auto start = std::chrono::system_clock::now();
   int num_samples = 0;
@@ -233,6 +239,7 @@ TEST(Cifar, TestGPU) {
       if (avg_accu >= threshold) {
         LOG(INFO) << "Meets target accuracy, stop training and save parameters";
         GlobalParameterCollection().SaveAllParameters(save_model_path);
+        model_saved = true;
         break;
       }
     }
@@ -240,13 +247,16 @@ TEST(Cifar, TestGPU) {
 
   auto end = std::chrono::system_clock::now();
   std::chrono::duration<double> elapsed_time = end - start;
-  LOG(INFO) << "Total wall clock time for iteration num " << (iter_num + 1)
-            << " is " << elapsed_time.count() << " seconds" << std::endl;
+  LOG(INFO) << "Total wall clock time for iteration num "
+            << (iter_num - skip_batch_num) << " is " << elapsed_time.count()
+            << " seconds" << std::endl;
   LOG(INFO) << "Total samples: " << num_samples
             << "; Throughput: " << num_samples / elapsed_time.count()
             << std::endl;
 
-  return;
+  if (!model_saved) {
+    return;
+  }
 
   // Inference using test set
   LOG(INFO) << "Start inferencing and load parameters";

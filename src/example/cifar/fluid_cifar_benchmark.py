@@ -119,10 +119,10 @@ def train(net_type, use_cuda, use_reader_op):
             dtypes=["float32", "int64"],
             pass_num=100,
             for_parallel=False)
-        train_data_file = fluid.layers.double_buffer(train_data_file)
-        # train_data_file = fluid.layers.double_buffer(
-        #     fluid.layers.batch(
-        #         train_data_file, batch_size=BATCH_SIZE))
+        # train_data_file = fluid.layers.double_buffer(train_data_file)
+        train_data_file = fluid.layers.double_buffer(
+            fluid.layers.batch(
+                train_data_file, batch_size=BATCH_SIZE))
         images, label = fluid.layers.read_file(train_data_file)
     else:
         images = fluid.layers.data(
