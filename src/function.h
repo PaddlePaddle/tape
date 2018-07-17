@@ -367,6 +367,11 @@ VariableHandle CreateDoubleBufferReader(VariableHandle reader) {
   return db_reader;
 }
 
+void ResetReader(VariableHandle reader) {
+  PADDLE_ENFORCE(reader->Var().IsType<framework::ReaderHolder>());
+  reader->GetMutable<framework::ReaderHolder>()->ReInit();
+}
+
 std::vector<VariableHandle> ReadNext(VariableHandle reader, bool repeat) {
   PADDLE_ENFORCE(reader->Var().IsType<framework::ReaderHolder>());
 
@@ -378,7 +383,9 @@ std::vector<VariableHandle> ReadNext(VariableHandle reader, bool repeat) {
     reader->GetMutable<framework::ReaderHolder>()->ReadNext(&data_holder);
     PADDLE_ENFORCE(!data_holder.empty(), "Error reading file.");
     if (!repeat) {
-      reader->GetMutable<framework::ReaderHolder>()->ReInit();
+      // FIXME(kexinzhao): Doing ReInit here will cause error when using
+      // double_buffer reader
+      // reader->GetMutable<framework::ReaderHolder>()->ReInit();
       return {};
     }
   }

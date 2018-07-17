@@ -107,8 +107,7 @@ def train(net_type, use_cuda, use_reader_op):
     BATCH_SIZE = 128
     print("Batch size is {}".format(BATCH_SIZE))
 
-    train_file_path = "/tmp/cifar10_train_" + str(
-        BATCH_SIZE) + "_CPUPlace.recordio"
+    train_file_path = "/tmp/cifar10_train.recordio"
 
     if use_reader_op:
         print("use reader op from {}".format(train_file_path))

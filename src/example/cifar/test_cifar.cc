@@ -46,6 +46,7 @@ using paddle::tape::CreateRecordioFileReader;
 using paddle::tape::CreateBatchReader;
 using paddle::tape::CreateDoubleBufferReader;
 using paddle::tape::ReadNext;
+using paddle::tape::ResetReader;
 
 TEST(Cifar, TestGPU) {
   // auto place = paddle::platform::CPUPlace();
@@ -158,11 +159,12 @@ TEST(Cifar, TestGPU) {
 
   int total_steps = 100000;
   int test_steps = 1000;
-  int print_step = 2000;
-  float threshold = 0.9f;
+  int print_step = 100;
+  float threshold = 0.8f;
   int iter_num = 1050;
   int skip_batch_num = 50;
   bool model_saved = false;
+  bool do_benchmark = false;
 
   auto start = std::chrono::system_clock::now();
   int num_samples = 0;
@@ -170,11 +172,11 @@ TEST(Cifar, TestGPU) {
   for (int i = 0; i < total_steps; ++i) {
     LOG(INFO) << "Train step #" << i;
 
-    if (i == iter_num) {
+    if (do_benchmark && i == iter_num) {
       break;
     }
 
-    if (i == skip_batch_num) {
+    if (do_benchmark && i == skip_batch_num) {
       start = std::chrono::system_clock::now();
       num_samples = 0;
     }
@@ -198,6 +200,7 @@ TEST(Cifar, TestGPU) {
     if ((i + 1) % print_step == 0) {
       std::vector<float> losses;
       std::vector<float> accuracies;
+      ResetReader(test_reader);
 
       LOG(INFO) << "Start testing";
       for (int i = 0; i < test_steps; ++i) {
@@ -232,7 +235,7 @@ TEST(Cifar, TestGPU) {
           std::accumulate(accuracies.begin(), accuracies.end(), 0.0f) /
           accuracies.size();
 
-      LOG(INFO) << "Pass #" << (i + 1) / print_step
+      LOG(INFO) << "Batch #" << i
                 << ", test set evaluation result: Avg loss is " << avg_loss
                 << ", Avg accuracy is " << avg_accu;
 
@@ -245,14 +248,16 @@ TEST(Cifar, TestGPU) {
     }
   }
 
-  auto end = std::chrono::system_clock::now();
-  std::chrono::duration<double> elapsed_time = end - start;
-  LOG(INFO) << "Total wall clock time for iteration num "
-            << (iter_num - skip_batch_num) << " is " << elapsed_time.count()
-            << " seconds" << std::endl;
-  LOG(INFO) << "Total samples: " << num_samples
-            << "; Throughput: " << num_samples / elapsed_time.count()
-            << std::endl;
+  if (do_benchmark) {
+    auto end = std::chrono::system_clock::now();
+    std::chrono::duration<double> elapsed_time = end - start;
+    LOG(INFO) << "Total wall clock time for iteration num "
+              << (iter_num - skip_batch_num) << " is " << elapsed_time.count()
+              << " seconds" << std::endl;
+    LOG(INFO) << "Total samples: " << num_samples
+              << "; Throughput: " << num_samples / elapsed_time.count()
+              << std::endl;
+  }
 
   if (!model_saved) {
     return;
@@ -332,6 +337,7 @@ TEST(Cifar, TestGPU) {
 
   std::vector<float> losses;
   std::vector<float> accuracies;
+  ResetReader(test_reader);
 
   while (true) {
     reset_global_tape(place);
