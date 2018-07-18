@@ -23,7 +23,7 @@ import numpy
 import unittest
 import os
 import numpy as np
-from time import time
+import time
 
 
 def resnet_cifar10(input, depth=32):
@@ -111,14 +111,13 @@ def train(net_type, use_cuda, use_reader_op):
 
     if use_reader_op:
         print("use reader op from {}".format(train_file_path))
-        train_data_file = fluid.layers.open_files(
-            filenames=train_file_path,
-            shapes=[[BATCH_SIZE, 3, 32, 32], [BATCH_SIZE, 1]],
+        train_data_file = fluid.layers.open_recordio_file(
+            filename=train_file_path,
+            shapes=[[-1, 3, 32, 32], [-1, 1]],
             lod_levels=[0, 0],
             dtypes=["float32", "int64"],
-            pass_num=100,
+            pass_num=50,
             for_parallel=False)
-        # train_data_file = fluid.layers.double_buffer(train_data_file)
         train_data_file = fluid.layers.double_buffer(
             fluid.layers.batch(
                 train_data_file, batch_size=BATCH_SIZE))
@@ -161,13 +160,13 @@ def train(net_type, use_cuda, use_reader_op):
 
     exe.run(fluid.default_startup_program())
 
-    PASS = 1000
+    PASS = 50
     iters = 1050
     skip_batch_num = 50
 
     print('start')
 
-    iter_num, num_samples, start = 0, 0, time()
+    iter_num, num_samples, start = 0, 0, time.time()
     for pass_id in range(PASS):
         if not use_reader_op:
             reader_generator = train_reader()
@@ -180,11 +179,12 @@ def train(net_type, use_cuda, use_reader_op):
             if iter_num == iters:
                 break
             if iter_num == skip_batch_num:
-                start = time()
+                start = time.time()
                 num_samples = 0
             if use_reader_op:
                 try:
-                    exe.run(fluid.default_main_program())
+                    exe.run(fluid.default_main_program(),
+                            use_program_cache=True)
                 except fluid.core.EnforceNotMet as ex:
                     break
             else:
@@ -198,7 +198,7 @@ def train(net_type, use_cuda, use_reader_op):
         if iter_num == iters:
             break
 
-    end = time()
+    end = time.time()
     elapsed_time = end - start
     print('{} iteratios takes {} seconds wall clock time'.format(
         iters - skip_batch_num, elapsed_time))

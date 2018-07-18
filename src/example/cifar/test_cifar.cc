@@ -161,10 +161,11 @@ TEST(Cifar, TestGPU) {
   int test_steps = 1000;
   int print_step = 100;
   float threshold = 0.8f;
+
   int iter_num = 1050;
   int skip_batch_num = 50;
   bool model_saved = false;
-  bool do_benchmark = false;
+  bool do_benchmark = true;
 
   auto start = std::chrono::system_clock::now();
   int num_samples = 0;
@@ -197,7 +198,7 @@ TEST(Cifar, TestGPU) {
     // Every time certain amount of batches have been processed,
     // we test the average loss and accuracy on the test data set,
     // we stop training when the accuracy hit some threshold
-    if ((i + 1) % print_step == 0) {
+    if (!do_benchmark && (i + 1) % print_step == 0) {
       std::vector<float> losses;
       std::vector<float> accuracies;
       ResetReader(test_reader);
