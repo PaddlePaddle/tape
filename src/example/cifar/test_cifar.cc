@@ -12,7 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <chrono>  // NOLINT
 #include <numeric>
+#include <string>
 #include <vector>
 
 #include "gtest/gtest.h"
@@ -41,20 +43,30 @@ using paddle::tape::ParameterHandle;
 using paddle::tape::GlobalParameterCollection;
 
 using paddle::tape::CreateRecordioFileReader;
+using paddle::tape::CreateBatchReader;
+using paddle::tape::CreateDoubleBufferReader;
 using paddle::tape::ReadNext;
+using paddle::tape::ResetReader;
 
 TEST(Cifar, TestGPU) {
   // auto place = paddle::platform::CPUPlace();
-  auto place = paddle::platform::CUDAPlace(1);
+  auto place = paddle::platform::CUDAPlace(0);
   reset_global_tape(place);
 
+  const int batch_size = 128;
+  LOG(INFO) << "Batch size is " << batch_size << std::endl;
+
   std::string save_model_path = "/tmp/cifar_model/";
-  std::string filename1 = "/tmp/cifar10_train_128_CPUPlace.recordio";
-  std::string filename2 = "/tmp/cifar10_test_128_CPUPlace.recordio";
+  std::string filename1 = "/tmp/cifar10_train.recordio";
+  std::string filename2 = "/tmp/cifar10_test.recordio";
   auto train_reader = CreateRecordioFileReader(
-      filename1, {128, 3, 32, 32, 128, 1}, {4, 2}, {0, 0});
+      filename1, {-1, 3, 32, 32, -1, 1}, {4, 2}, {0, 0});
   auto test_reader = CreateRecordioFileReader(
-      filename2, {128, 3, 32, 32, 128, 1}, {4, 2}, {0, 0});
+      filename2, {-1, 3, 32, 32, -1, 1}, {4, 2}, {0, 0});
+  train_reader =
+      CreateDoubleBufferReader(CreateBatchReader(train_reader, batch_size));
+  test_reader =
+      CreateDoubleBufferReader(CreateBatchReader(test_reader, batch_size));
 
   // input 3x32x32
   // after conv1_1   64x32x32
@@ -145,14 +157,30 @@ TEST(Cifar, TestGPU) {
     return fc3(fc2(dropout(temp6, d_attrs)));
   };
 
-  int total_steps = 10000;
+  int total_steps = 100000;
   int test_steps = 1000;
   int print_step = 100;
-  float threshold = 0.6f;
+  float threshold = 0.8f;
 
+  int iter_num = 1050;
+  int skip_batch_num = 50;
+  bool model_saved = false;
+  bool do_benchmark = true;
+
+  auto start = std::chrono::system_clock::now();
+  int num_samples = 0;
   // Training
   for (int i = 0; i < total_steps; ++i) {
     LOG(INFO) << "Train step #" << i;
+
+    if (do_benchmark && i == iter_num) {
+      break;
+    }
+
+    if (do_benchmark && i == skip_batch_num) {
+      start = std::chrono::system_clock::now();
+      num_samples = 0;
+    }
 
     reset_global_tape(place);
     auto data_label = ReadNext(train_reader, true);
@@ -165,12 +193,15 @@ TEST(Cifar, TestGPU) {
 
     BackwardAndUpdate(loss, &adam);
 
+    num_samples += batch_size;
+
     // Every time certain amount of batches have been processed,
     // we test the average loss and accuracy on the test data set,
     // we stop training when the accuracy hit some threshold
-    if ((i + 1) % print_step == 0) {
+    if (!do_benchmark && (i + 1) % print_step == 0) {
       std::vector<float> losses;
       std::vector<float> accuracies;
+      ResetReader(test_reader);
 
       LOG(INFO) << "Start testing";
       for (int i = 0; i < test_steps; ++i) {
@@ -205,16 +236,32 @@ TEST(Cifar, TestGPU) {
           std::accumulate(accuracies.begin(), accuracies.end(), 0.0f) /
           accuracies.size();
 
-      LOG(INFO) << "Pass #" << (i + 1) / print_step
+      LOG(INFO) << "Batch #" << i
                 << ", test set evaluation result: Avg loss is " << avg_loss
                 << ", Avg accuracy is " << avg_accu;
 
       if (avg_accu >= threshold) {
         LOG(INFO) << "Meets target accuracy, stop training and save parameters";
         GlobalParameterCollection().SaveAllParameters(save_model_path);
+        model_saved = true;
         break;
       }
     }
+  }
+
+  if (do_benchmark) {
+    auto end = std::chrono::system_clock::now();
+    std::chrono::duration<double> elapsed_time = end - start;
+    LOG(INFO) << "Total wall clock time for iteration num "
+              << (iter_num - skip_batch_num) << " is " << elapsed_time.count()
+              << " seconds" << std::endl;
+    LOG(INFO) << "Total samples: " << num_samples
+              << "; Throughput: " << num_samples / elapsed_time.count()
+              << std::endl;
+  }
+
+  if (!model_saved) {
+    return;
   }
 
   // Inference using test set
@@ -291,6 +338,7 @@ TEST(Cifar, TestGPU) {
 
   std::vector<float> losses;
   std::vector<float> accuracies;
+  ResetReader(test_reader);
 
   while (true) {
     reset_global_tape(place);

@@ -274,7 +274,8 @@ VariableHandle accuracy(VariableHandle prediction,
 
 VariableHandle pool2d(VariableHandle x,
                       const framework::AttributeMap &attrs = {
-                          {"strides", std::vector<int>{2, 2}}}) {
+                          {"strides", std::vector<int>{2, 2}},
+                          {"use_cudnn", true}}) {
   VariableHandle out(new Variable("pool2d"));
   get_global_tape().AddOp("pool2d", {{"X", {x}}}, {{"Out", {out}}}, attrs);
   return out;
@@ -344,17 +345,47 @@ VariableHandle CreateRecordioFileReader(std::string filename,
   return reader;
 }
 
+VariableHandle CreateBatchReader(VariableHandle reader, int batch_size) {
+  VariableHandle batch_reader(new paddle::tape::Variable("reader"));
+
+  RunOperator("create_batch_reader",
+              {{"UnderlyingReader", {reader}}},
+              {{"Out", {batch_reader}}},
+              {{"batch_size", batch_size}});
+
+  return batch_reader;
+}
+
+VariableHandle CreateDoubleBufferReader(VariableHandle reader) {
+  VariableHandle db_reader(new paddle::tape::Variable("reader"));
+
+  RunOperator("create_double_buffer_reader",
+              {{"UnderlyingReader", {reader}}},
+              {{"Out", {db_reader}}},
+              {});
+
+  return db_reader;
+}
+
+void ResetReader(VariableHandle reader) {
+  PADDLE_ENFORCE(reader->Var().IsType<framework::ReaderHolder>());
+  reader->GetMutable<framework::ReaderHolder>()->ReInit();
+}
+
 std::vector<VariableHandle> ReadNext(VariableHandle reader, bool repeat) {
   PADDLE_ENFORCE(reader->Var().IsType<framework::ReaderHolder>());
 
   framework::LoDTensorArray data_holder;
   reader->GetMutable<framework::ReaderHolder>()->ReadNext(&data_holder);
   if (data_holder.empty()) {
+    VLOG(5) << "ReInit reader";
     reader->GetMutable<framework::ReaderHolder>()->ReInit();
     reader->GetMutable<framework::ReaderHolder>()->ReadNext(&data_holder);
     PADDLE_ENFORCE(!data_holder.empty(), "Error reading file.");
     if (!repeat) {
-      reader->GetMutable<framework::ReaderHolder>()->ReInit();
+      // FIXME(kexinzhao): Doing ReInit here will cause error when using
+      // double_buffer reader
+      // reader->GetMutable<framework::ReaderHolder>()->ReInit();
       return {};
     }
   }
