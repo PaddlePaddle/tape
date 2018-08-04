@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 #include <fstream>
 #include <string>
@@ -63,17 +64,20 @@ class Fill {
 
 class Linear {
  public:
-  Linear(int in_dim, int out_dim, const std::string &act = "") : act_(act) {
+  Linear(std::vector<int> in_dims, int out_dim, const std::string &act = "")
+      : act_(act) {
     // Use Xavier to initialize Weight
-    float limit = sqrt(6.0 / static_cast<float>(in_dim + out_dim));
     framework::AttributeMap attrs;
-    attrs["shape"] = std::vector<int>{in_dim, out_dim};
     attrs["dtype"] = paddle::framework::proto::VarType::Type::VarType_Type_FP32;
-    attrs["min"] = -limit;
-    attrs["max"] = limit;
     attrs["seed"] = RandomSeed::GetRandomSeed();
-    w_ = GlobalParameterCollection().AddParameter(
-        "LinearWeight", "uniform_random", attrs);
+    for (int in_dim : in_dims) {
+      float limit = sqrt(6.0 / static_cast<float>(in_dim + out_dim));
+      attrs["min"] = -limit;
+      attrs["max"] = limit;
+      attrs["shape"] = std::vector<int>{in_dim, out_dim};
+      weights_.emplace_back(GlobalParameterCollection().AddParameter(
+          "LinearWeight", "uniform_random", attrs));
+    }
 
     // Use fill zero to initialize Bias
     attrs["dtype"] = paddle::framework::proto::VarType::Type::VarType_Type_FP32;
@@ -84,16 +88,33 @@ class Linear {
   }
 
   Linear(const std::vector<ParameterHandle> &params, const std::string &act)
-      : act_(act), w_(params[0]), b_(params[1]) {}
+      : act_(act), b_(params.back()) {
+    for (int i = 0; i < params.size() - 1; ++i) {
+      weights_.emplace_back(params[i]);
+    }
+  }
 
-  VariableHandle operator()(VariableHandle input,
+  VariableHandle operator()(std::vector<VariableHandle> inputs,
                             const framework::AttributeMap &mul_op_attrs = {},
                             const framework::AttributeMap &add_op_attrs = {}) {
+    PADDLE_ENFORCE_EQ(inputs.size(), weights_.size());
+    std::vector<VariableHandle> sums;
+    for (int i = 0; i < inputs.size(); ++i) {
+      VariableHandle pre_bias(new Variable("linear"));
+      get_global_tape().AddOp("mul",
+                              {{"X", {inputs[i]}}, {"Y", {weights_[i]}}},
+                              {{"Out", {pre_bias}}},
+                              mul_op_attrs);
+      sums.emplace_back(pre_bias);
+    }
+
     VariableHandle pre_bias(new Variable("linear"));
-    get_global_tape().AddOp("mul",
-                            {{"X", {input}}, {"Y", {w_}}},
-                            {{"Out", {pre_bias}}},
-                            mul_op_attrs);
+    if (inputs.size() > 1) {
+      get_global_tape().AddOp("sum", {{"X", sums}}, {{"Out", {pre_bias}}}, {});
+    } else {
+      pre_bias = sums[0];
+    }
+
     VariableHandle pre_act(new Variable("linear"));
     get_global_tape().AddOp("elementwise_add",
                             {{"X", {pre_bias}}, {"Y", {b_}}},
@@ -108,12 +129,19 @@ class Linear {
     return post_act;
   }
 
-  std::vector<std::string> ParamNames() { return {w_->Name(), b_->Name()}; }
+  std::vector<std::string> ParamNames() {
+    std::vector<std::string> res;
+    for (auto w : weights_) {
+      res.emplace_back(w->Name());
+    }
+    res.emplace_back(b_->Name());
+    return res;
+  }
 
   std::string ActName() { return act_; }
 
  private:
-  ParameterHandle w_;
+  std::vector<ParameterHandle> weights_;
   ParameterHandle b_;
   std::string act_;
 };
@@ -249,6 +277,35 @@ class BatchNorm {
   std::string act_;
 };
 
+class Embedding {
+ public:
+  Embedding(int in_dim, int out_dim) {
+    // Use Xavier to initialize lookup table
+    float limit = sqrt(6.0 / static_cast<float>(in_dim + out_dim));
+    framework::AttributeMap attrs;
+    attrs["shape"] = std::vector<int>{in_dim, out_dim};
+    attrs["dtype"] = paddle::framework::proto::VarType::Type::VarType_Type_FP32;
+    attrs["min"] = -limit;
+    attrs["max"] = limit;
+    attrs["seed"] = RandomSeed::GetRandomSeed();
+    w_ = GlobalParameterCollection().AddParameter(
+        "lookup_table", "uniform_random", attrs);
+  }
+
+  VariableHandle operator()(VariableHandle input) {
+    VariableHandle output(new Variable("embedding"));
+    get_global_tape().AddOp(
+        "lookup_table",
+        {{"Ids", {input}}, {"W", {w_}}},
+        {{"Out", {output}}},
+        {{"is_sparse", false}, {"is_distributed", false}, {"padding_idx", -2}});
+    return output;
+  }
+
+ private:
+  ParameterHandle w_;
+};
+
 // Calculate the top k accuracy of the prediction against the label
 VariableHandle accuracy(VariableHandle prediction,
                         VariableHandle label,
@@ -302,6 +359,18 @@ VariableHandle relu(VariableHandle x) {
   return out;
 }
 
+VariableHandle sigmoid(VariableHandle x) {
+  VariableHandle out(new Variable("sigmoid"));
+  get_global_tape().AddOp("sigmoid", {{"X", {x}}}, {{"Out", {out}}}, {});
+  return out;
+}
+
+VariableHandle tanh(VariableHandle x) {
+  VariableHandle out(new Variable("tanh"));
+  get_global_tape().AddOp("tanh", {{"X", {x}}}, {{"Out", {out}}}, {});
+  return out;
+}
+
 VariableHandle softmax(VariableHandle x) {
   VariableHandle out(new Variable("softmax"));
   get_global_tape().AddOp("softmax", {{"X", {x}}}, {{"Out", {out}}}, {});
@@ -320,6 +389,96 @@ VariableHandle add(VariableHandle x, VariableHandle y) {
   get_global_tape().AddOp(
       "elementwise_add", {{"X", {x}}, {"Y", {y}}}, {{"Out", {out}}}, {});
   return out;
+}
+
+VariableHandle ReorderAndPad(VariableHandle x, int padding_idx = -2) {
+  VariableHandle out(new Variable("reorder"));
+  auto input_tensor = x->Get<paddle::framework::LoDTensor>();
+  PADDLE_ENFORCE(paddle::platform::is_cpu_place(input_tensor.place()));
+
+  auto dim = input_tensor.dims();
+  auto lod = input_tensor.lod()[0];
+
+  size_t batch_size = lod.size() - 1;
+  size_t max_seq_len = 0;
+  for (size_t i = 0; i < batch_size; ++i) {
+    max_seq_len = std::max(max_seq_len, lod[i + 1] - lod[i]);
+  }
+
+  int64_t length = static_cast<int64_t>(batch_size * max_seq_len);
+  auto out_dim = paddle::framework::make_ddim({length, 1});
+
+  auto *output_tensor = out->GetMutable<paddle::framework::LoDTensor>();
+  int64_t *out_data =
+      output_tensor->mutable_data<int64_t>(out_dim, input_tensor.place());
+  const int64_t *in_data = input_tensor.data<int64_t>();
+
+  for (int i = 0; i < batch_size; ++i) {
+    for (int j = 0; j < max_seq_len; ++j) {
+      if (lod[i] + j < lod[i + 1]) {
+        out_data[batch_size * j + i] = in_data[lod[i] + j];
+      } else {
+        out_data[batch_size * j + i] = -2;
+      }
+    }
+  }
+
+  return out;
+}
+
+VariableHandle reshape(VariableHandle x, std::vector<int> shape, bool inplace) {
+  VariableHandle out(new Variable("reshape"));
+  get_global_tape().AddOp("reshape",
+                          {{"X", {x}}},
+                          {{"Out", {out}}},
+                          {{"shape", shape}, {"inplace", inplace}});
+  return out;
+}
+
+VariableHandle concat(std::vector<VariableHandle> inputs, int axis = 0) {
+  VariableHandle out(new Variable("concat"));
+  get_global_tape().AddOp(
+      "concat", {{"X", inputs}}, {{"Out", {out}}}, {{"axis", axis}});
+  return out;
+}
+
+std::vector<VariableHandle> split(VariableHandle x) {
+  // We need to known the runtime shape of x
+  x->Value();
+  int time_steps =
+      static_cast<int>(x->Get<paddle::framework::LoDTensor>().dims()[0]);
+  std::vector<VariableHandle> outputs;
+  for (int i = 0; i < time_steps; ++i) {
+    outputs.push_back(VariableHandle(new Variable("split")));
+  }
+  get_global_tape().AddOp(
+      "split", {{"X", {x}}}, {{"Out", outputs}}, {{"num", time_steps}});
+  for (auto out : outputs) {
+    LOG(INFO) << out->Name();
+    LOG(INFO) << out->Value();
+  }
+
+  return outputs;
+}
+
+VariableHandle fill_constant(std::vector<int> shape, float val = 0.0f) {
+  VariableHandle output(new Variable("fill_constant"));
+  paddle::framework::AttributeMap attrs;
+  attrs["shape"] = shape;
+  attrs["value"] = val;
+  RunOperator("fill_constant", {}, {{"Out", {output}}}, attrs);
+  return output;
+}
+
+std::vector<VariableHandle> lstm_step(VariableHandle x, VariableHandle c_prev) {
+  VariableHandle cell_state(new Variable("lstm_step"));
+  VariableHandle hidden_state(new Variable("lstm_step"));
+
+  get_global_tape().AddOp("lstm_unit",
+                          {{"X", {x}}, {"C_prev", {c_prev}}},
+                          {{"C", {cell_state}}, {"H", {hidden_state}}},
+                          {});
+  return {cell_state, hidden_state};
 }
 
 VariableHandle CreateRecordioFileReader(std::string filename,

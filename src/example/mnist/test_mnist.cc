@@ -47,13 +47,13 @@ TEST(Mnist, TestCPU) {
   auto test_reader = CreateRecordioFileReader(
       filename2, {32, 1, 28, 28, 32, 1}, {4, 2}, {0, 0});
 
-  Linear linear1(784, 200, "tanh");
-  Linear linear2(200, 200, "tanh");
-  Linear linear3(200, 10, "softmax");
+  Linear linear1({784}, 200, "tanh");
+  Linear linear2({200}, 200, "tanh");
+  Linear linear3({200}, 10, "softmax");
   Adam adam(0.001);
 
   auto forward = [&](VariableHandle input) -> VariableHandle {
-    return linear3(linear2(linear1(input)));
+    return linear3({linear2({linear1({input})})});
   };
 
   int total_steps = 10000;
@@ -129,7 +129,7 @@ TEST(Mnist, TestCPU) {
   Linear inf_linear3(loaded_pc.LookUp(linear3.ParamNames()), linear3.ActName());
 
   auto inference = [&](VariableHandle input) -> VariableHandle {
-    return inf_linear3(inf_linear2(inf_linear1(input)));
+    return inf_linear3({inf_linear2({inf_linear1({input})})});
   };
 
   std::vector<float> losses;
