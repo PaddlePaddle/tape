@@ -34,6 +34,7 @@ using paddle::tape::split;
 using paddle::tape::concat;
 using paddle::tape::fill_constant;
 using paddle::tape::lstm_step;
+using paddle::tape::gather;
 using paddle::tape::reset_global_tape;
 using paddle::tape::get_global_tape;
 using paddle::tape::OptimizableParameters;
@@ -44,6 +45,7 @@ using paddle::tape::GlobalParameterCollection;
 using paddle::tape::RunOperator;
 
 using paddle::tape::ReorderAndPad;
+using paddle::tape::GetSeqLens;
 using paddle::tape::CreateRecordioFileReader;
 using paddle::tape::CreateBatchReader;
 using paddle::tape::CreateDoubleBufferReader;
@@ -66,63 +68,116 @@ TEST(NMT, TestTrainCPU) {
       train_file, {-1, 1, -1, 1, -1, 1}, {2, 2, 2}, {1, 1, 1});
   train_reader = CreateBatchReader(train_reader, batch_size);
 
-  auto nmt_train = ReadNext(train_reader, true);
-  LOG(INFO) << nmt_train.size() << std::endl;
-  LOG(INFO) << nmt_train[0]->Value() << std::endl;
-  LOG(INFO) << nmt_train[1]->Value() << std::endl;
-  LOG(INFO) << nmt_train[2]->Value() << std::endl;
+  // Used as lookup table for both source and target word idx.
+  Embedding embed(dict_size, word_dim);
+  // Output of this fc serves as the input to the lstm unit update in encoder.
+  Linear encoder_fc({word_dim, hidden_size}, 4 * hidden_size);
+  // decoder_train
+  Linear decoder_fc1({hidden_size, hidden_size}, hidden_size, "tanh");
+  Linear decoder_fc2({hidden_size}, dict_size, "softmax");
 
-  // If look up table find this word idx, if will insert a zero vector in the
-  // result
-  // also it will bypass this idx when doing backward calculation
-  int padding_idx = -2;
-  auto src_idx = ReorderAndPad(nmt_train[0], padding_idx);
-  auto trg_idx = ReorderAndPad(nmt_train[1], padding_idx);
-  auto trg_next_idx = ReorderAndPad(nmt_train[2], padding_idx);
+  Adam adam(0.001);
 
-  LOG(INFO) << "After reorder";
-  LOG(INFO) << src_idx->Value() << std::endl;
-  LOG(INFO) << trg_idx->Value() << std::endl;
-  LOG(INFO) << trg_next_idx->Value() << std::endl;
+  auto encoder = [&](VariableHandle input) -> VariableHandle {
+    // Get seq lens info for both src idx and target idx
+    std::vector<int> seq_lens = GetSeqLens(input);
+    // If the word idx is equal to the padding idx, the look up table op will
+    // insert
+    // a zero vector in the result. Also it will bypass this idx when doing
+    // backprop.
+    int padding_idx = -2;
+    // Reorder the batch of word idx sequence to the shape of [max_seq_len *
+    // batch_size, 1]
+    // where the same time step of different batches are placed together
+    // followed by
+    // the batch of word idx in the next time step, padding padding_idx where
+    // needed.
+    auto src_idx = ReorderAndPad(input, padding_idx);
 
-  Embedding embed1(dict_size, word_dim);
-  auto output = embed1(src_idx);
-  LOG(INFO) << output->Value();
+    auto src_vec = embed(src_idx);
+    // reshape src_vec to [max_seq_len, batch_size, word_dim]
+    // then split to max_seq_len number of time step vector
+    auto steps = split(reshape(src_vec, {-1, batch_size, word_dim}, true));
+    std::vector<VariableHandle> src_steps;
+    for (auto step : steps) {
+      // each step is of shape [1, batch_size, word_dim]
+      src_steps.emplace_back(reshape(step, {batch_size, word_dim}, true));
+    }
 
-  auto reshaped = reshape(output, {-1, batch_size, word_dim}, true);
-  LOG(INFO) << reshaped->Value();
-  auto temp = split(reshaped);
-  std::vector<VariableHandle> steps;
-  for (auto in : temp) {
-    steps.emplace_back(reshape(in, {batch_size, word_dim}, true));
-  }
+    std::vector<VariableHandle> cell_states;
+    std::vector<VariableHandle> output_states;
 
-  // input is of shape (1, batch_size, word_dim)
-  Linear fc1({word_dim, hidden_size}, 4 * hidden_size);
-  std::vector<VariableHandle> cell_states;
-  std::vector<VariableHandle> output_states;
+    VariableHandle init_cell = fill_constant({batch_size, hidden_size}, 0.0f);
+    VariableHandle init_hidden = fill_constant({batch_size, hidden_size}, 0.0f);
 
-  VariableHandle init_cell = fill_constant({batch_size, hidden_size}, 0.0f);
-  VariableHandle init_hidden = fill_constant({batch_size, hidden_size}, 0.0f);
+    cell_states.emplace_back(init_cell);
+    output_states.emplace_back(init_hidden);
 
-  cell_states.emplace_back(init_cell);
-  output_states.emplace_back(init_hidden);
+    for (auto step : src_steps) {
+      auto step_input = encoder_fc({step, output_states.back()});
+      std::vector<VariableHandle> outputs =
+          lstm_step(step_input, cell_states.back());
+      cell_states.emplace_back(outputs[0]);
+      output_states.emplace_back(outputs[1]);
+    }
 
-  for (auto step : steps) {
-    auto lstm_step_input = fc1({step, output_states.back()});
-    std::vector<VariableHandle> outputs =
-        lstm_step(lstm_step_input, cell_states.back());
-    cell_states.emplace_back(outputs[0]);
-    output_states.emplace_back(outputs[1]);
-  }
+    std::vector<VariableHandle> encoder_output;
+    for (int i = 0; i < batch_size; ++i) {
+      encoder_output.emplace_back(gather(output_states[seq_lens[i]], {i}));
+    }
 
-  get_global_tape().Forward();
-  LOG(INFO) << "cell states size " << cell_states.size() << "output states size"
-            << output_states.size();
+    return concat(encoder_output);
+  };
 
-  for (int i = 0; i < cell_states.size(); ++i) {
-    LOG(INFO) << cell_states[i]->Value();
-    LOG(INFO) << output_states[i]->Value();
+  auto decoder_train = [&](VariableHandle context,
+                           VariableHandle input) -> VariableHandle {
+    std::vector<int> seq_lens = GetSeqLens(input);
+    auto tgt_idx = ReorderAndPad(input, -2);
+
+    std::vector<VariableHandle> decoder_states;
+    std::vector<VariableHandle> decoder_outputs;
+    decoder_states.emplace_back(context);
+
+    auto tgt_vec = embed(tgt_idx);
+    auto steps = split(reshape(tgt_vec, {-1, batch_size, word_dim}, true));
+    std::vector<VariableHandle> decoder_steps;
+    for (auto step : steps) {
+      decoder_steps.emplace_back(reshape(step, {batch_size, word_dim}, true));
+    }
+
+    for (auto step : decoder_steps) {
+      auto current_state = decoder_fc1({step, decoder_states.back()});
+      decoder_states.emplace_back(current_state);
+      decoder_outputs.emplace_back(decoder_fc2({current_state}));
+    }
+
+    std::vector<VariableHandle> decoder_result;
+    for (int i = 0; i < batch_size; ++i) {
+      for (int j = 0; j < seq_lens[i]; ++j) {
+        decoder_result.emplace_back(gather(decoder_outputs[j], {i}));
+      }
+    }
+
+    return concat(decoder_result);
+  };
+
+  int total_steps = 10000;
+
+  for (int i = 0; i < total_steps; ++i) {
+    LOG(INFO) << "Train step #" << i;
+
+    reset_global_tape(place);
+    auto nmt_train = ReadNext(train_reader, true);
+
+    auto encoder_out = encoder(nmt_train[0]);
+    auto rnn_out = decoder_train(encoder_out, nmt_train[1]);
+
+    auto trg_next_idx = nmt_train[2];
+    VariableHandle cost = cross_entropy(rnn_out, trg_next_idx);
+    VariableHandle loss = mean(cost);
+    LOG(INFO) << loss->Value();
+
+    BackwardAndUpdate(loss, &adam);
   }
 }
 

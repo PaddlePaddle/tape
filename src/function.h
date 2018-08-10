@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <fstream>
 #include <string>
 #include <tuple>
@@ -68,7 +69,7 @@ class Linear {
       : act_(act) {
     // Use Xavier to initialize Weight
     framework::AttributeMap attrs;
-    attrs["dtype"] = paddle::framework::proto::VarType::Type::VarType_Type_FP32;
+    attrs["dtype"] = framework::proto::VarType::Type::VarType_Type_FP32;
     attrs["seed"] = RandomSeed::GetRandomSeed();
     for (int in_dim : in_dims) {
       float limit = sqrt(6.0 / static_cast<float>(in_dim + out_dim));
@@ -80,7 +81,7 @@ class Linear {
     }
 
     // Use fill zero to initialize Bias
-    attrs["dtype"] = paddle::framework::proto::VarType::Type::VarType_Type_FP32;
+    attrs["dtype"] = framework::proto::VarType::Type::VarType_Type_FP32;
     attrs["shape"] = std::vector<int>{out_dim};
     attrs["value"] = 0.0f;
     b_ = GlobalParameterCollection().AddParameter(
@@ -284,7 +285,7 @@ class Embedding {
     float limit = sqrt(6.0 / static_cast<float>(in_dim + out_dim));
     framework::AttributeMap attrs;
     attrs["shape"] = std::vector<int>{in_dim, out_dim};
-    attrs["dtype"] = paddle::framework::proto::VarType::Type::VarType_Type_FP32;
+    attrs["dtype"] = framework::proto::VarType::Type::VarType_Type_FP32;
     attrs["min"] = -limit;
     attrs["max"] = limit;
     attrs["seed"] = RandomSeed::GetRandomSeed();
@@ -391,6 +392,35 @@ VariableHandle add(VariableHandle x, VariableHandle y) {
   return out;
 }
 
+VariableHandle var_from_vector(std::vector<int> input) {
+  VariableHandle out(new Variable("from_vector"));
+  int *out_data = out->GetMutable<framework::LoDTensor>()->mutable_data<int>(
+      framework::make_ddim({static_cast<int64_t>(input.size())}),
+      paddle::platform::CPUPlace());
+  std::memcpy(out_data, input.data(), input.size() * sizeof(int));
+  return out;
+}
+
+VariableHandle gather(VariableHandle x, std::vector<int> idx) {
+  VariableHandle out(new Variable("gather"));
+  get_global_tape().AddOp("gather",
+                          {{"X", {x}}, {"Index", {var_from_vector(idx)}}},
+                          {{"Out", {out}}},
+                          {});
+  return out;
+}
+
+std::vector<int> GetSeqLens(VariableHandle x) {
+  std::vector<int> lens;
+  auto lod = x->Get<paddle::framework::LoDTensor>().lod();
+  PADDLE_ENFORCE_GT(lod.size(), 0);
+  PADDLE_ENFORCE_GT(lod[0].size(), 1);
+  for (int i = 0; i < lod[0].size() - 1; ++i) {
+    lens.push_back(lod[0][i + 1] - lod[0][i]);
+  }
+  return lens;
+}
+
 VariableHandle ReorderAndPad(VariableHandle x, int padding_idx = -2) {
   VariableHandle out(new Variable("reorder"));
   auto input_tensor = x->Get<paddle::framework::LoDTensor>();
@@ -453,10 +483,10 @@ std::vector<VariableHandle> split(VariableHandle x) {
   }
   get_global_tape().AddOp(
       "split", {{"X", {x}}}, {{"Out", outputs}}, {{"num", time_steps}});
-  for (auto out : outputs) {
-    LOG(INFO) << out->Name();
-    LOG(INFO) << out->Value();
-  }
+  //  for (auto out : outputs) {
+  //    LOG(INFO) << out->Name();
+  //    LOG(INFO) << out->Value();
+  //  }
 
   return outputs;
 }
