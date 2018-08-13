@@ -12,6 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <chrono>  // NOLINT
+#include <numeric>
+#include <string>
+#include <vector>
+
 #include "gtest/gtest.h"
 #include "paddle/fluid/platform/place.h"
 #include "src/function.h"
@@ -52,6 +57,8 @@ using paddle::tape::CreateDoubleBufferReader;
 using paddle::tape::ReadNext;
 using paddle::tape::ResetReader;
 
+enum RnnType { LSTM, GRU, VANILLA };
+
 TEST(NMT, TestTrainCPU) {
   auto place = paddle::platform::CPUPlace();
   reset_global_tape(place);
@@ -63,18 +70,23 @@ TEST(NMT, TestTrainCPU) {
   LOG(INFO) << "Batch size is " << batch_size << std::endl;
 
   std::string save_model_path = "/tmp/NMT_model/";
-  std::string train_file = "/tmp/wmt14_train.recordio";
+  std::string file = "/tmp/wmt14_train.recordio";
   auto train_reader = CreateRecordioFileReader(
-      train_file, {-1, 1, -1, 1, -1, 1}, {2, 2, 2}, {1, 1, 1});
+      file, {-1, 1, -1, 1, -1, 1}, {2, 2, 2}, {1, 1, 1});
+  auto test_reader = CreateRecordioFileReader(
+      file, {-1, 1, -1, 1, -1, 1}, {2, 2, 2}, {1, 1, 1});
   train_reader = CreateBatchReader(train_reader, batch_size);
+  test_reader = CreateBatchReader(test_reader, batch_size);
 
   // Used as lookup table for both source and target word idx.
   Embedding embed(dict_size, word_dim);
   // Output of this fc serves as the input to the lstm unit update in encoder.
   Linear encoder_fc({word_dim, hidden_size}, 4 * hidden_size);
   // decoder_train
-  Linear decoder_fc1({hidden_size, hidden_size}, hidden_size, "tanh");
-  Linear decoder_fc2({hidden_size}, dict_size, "softmax");
+  Linear decoder_fc({word_dim, hidden_size}, 4 * hidden_size);
+  Linear decoder_softmax({hidden_size}, dict_size, "softmax");
+  // Linear decoder_fc1({word_dim, hidden_size}, hidden_size, "tanh");
+  // Linear decoder_fc2({hidden_size}, dict_size, "softmax");
 
   Adam adam(0.001);
 
@@ -135,8 +147,10 @@ TEST(NMT, TestTrainCPU) {
     auto tgt_idx = ReorderAndPad(input, -2);
 
     std::vector<VariableHandle> decoder_states;
+    std::vector<VariableHandle> decoder_hidden;
     std::vector<VariableHandle> decoder_outputs;
     decoder_states.emplace_back(context);
+    decoder_hidden.emplace_back(fill_constant({batch_size, hidden_size}, 0.0f));
 
     auto tgt_vec = embed(tgt_idx);
     auto steps = split(reshape(tgt_vec, {-1, batch_size, word_dim}, true));
@@ -146,9 +160,15 @@ TEST(NMT, TestTrainCPU) {
     }
 
     for (auto step : decoder_steps) {
-      auto current_state = decoder_fc1({step, decoder_states.back()});
-      decoder_states.emplace_back(current_state);
-      decoder_outputs.emplace_back(decoder_fc2({current_state}));
+      auto step_input = decoder_fc({step, decoder_hidden.back()});
+      std::vector<VariableHandle> outputs =
+          lstm_step(step_input, decoder_states.back());
+      decoder_states.emplace_back(outputs[0]);
+      decoder_hidden.emplace_back(outputs[1]);
+      decoder_outputs.emplace_back(decoder_softmax({outputs[1]}));
+      //  auto current_state = decoder_fc1({step, decoder_states.back()});
+      //  decoder_states.emplace_back(current_state);
+      //  decoder_outputs.emplace_back(decoder_fc2({current_state}));
     }
 
     std::vector<VariableHandle> decoder_result;
@@ -161,13 +181,19 @@ TEST(NMT, TestTrainCPU) {
     return concat(decoder_result);
   };
 
-  int total_steps = 10000;
+  int total_steps = 20000;
+  int print_steps = 100;
+  int test_steps = 20;
+  float threshold = 5.5f;
+  bool model_saved = false;
 
+  auto start = std::chrono::system_clock::now();
   for (int i = 0; i < total_steps; ++i) {
-    LOG(INFO) << "Train step #" << i;
+    // LOG(INFO) << "Train step #" << i;
 
     reset_global_tape(place);
     auto nmt_train = ReadNext(train_reader, true);
+    // LOG(INFO) << nmt_train[0]->Value();
 
     auto encoder_out = encoder(nmt_train[0]);
     auto rnn_out = decoder_train(encoder_out, nmt_train[1]);
@@ -175,10 +201,48 @@ TEST(NMT, TestTrainCPU) {
     auto trg_next_idx = nmt_train[2];
     VariableHandle cost = cross_entropy(rnn_out, trg_next_idx);
     VariableHandle loss = mean(cost);
-    LOG(INFO) << loss->Value();
+    // LOG(INFO) << loss->Value();
 
     BackwardAndUpdate(loss, &adam);
+
+    if ((i + 1) % print_steps == 0) {
+      std::vector<float> losses;
+      ResetReader(test_reader);
+
+      LOG(INFO) << "starting testing";
+      for (int i = 0; i < test_steps; ++i) {
+        reset_global_tape(place);
+
+        auto nmt_test = ReadNext(test_reader, true);
+        // LOG(INFO) << nmt_test[0]->Value();
+        auto test_encoder_out = encoder(nmt_test[0]);
+        auto test_rnn_out = decoder_train(test_encoder_out, nmt_test[1]);
+
+        VariableHandle loss = mean(cross_entropy(test_rnn_out, nmt_test[2]));
+        get_global_tape().Forward();
+
+        losses.push_back(loss->FetchValue()
+                             ->Get<paddle::framework::LoDTensor>()
+                             .data<float>()[0]);
+      }
+
+      float avg_loss =
+          std::accumulate(losses.begin(), losses.end(), 0.0f) / losses.size();
+      LOG(INFO) << "Batch #" << i << ", test set avg loss is " << avg_loss;
+
+      if (avg_loss < threshold) {
+        LOG(INFO) << "Meets target avg loss, stop training and save parameters";
+        GlobalParameterCollection().SaveAllParameters(save_model_path);
+        model_saved = true;
+        break;
+      }
+    }
   }
+
+  auto end = std::chrono::system_clock::now();
+  std::chrono::duration<double> elapsed_time = end - start;
+  LOG(INFO) << "Total wall clock time is " << elapsed_time.count()
+            << " seconds";
 }
 
 int main(int argc, char** argv) {
