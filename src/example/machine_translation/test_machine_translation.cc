@@ -57,8 +57,6 @@ using paddle::tape::CreateDoubleBufferReader;
 using paddle::tape::ReadNext;
 using paddle::tape::ResetReader;
 
-enum RnnType { LSTM, GRU, VANILLA };
-
 TEST(NMT, TestTrainCPU) {
   auto place = paddle::platform::CPUPlace();
   reset_global_tape(place);
@@ -83,8 +81,12 @@ TEST(NMT, TestTrainCPU) {
   Embedding embed(dict_size, word_dim);
   // Output of this fc serves as the input to the lstm unit update in encoder.
   Linear encoder_fc({word_dim, hidden_size}, 4 * hidden_size);
-  // decoder_train
-  Linear decoder_fc({word_dim, hidden_size}, 4 * hidden_size);
+
+  // Linear decoder_fc({word_dim, hidden_size}, 4 * hidden_size);
+  // decoder rnn fc layer, inputs include context from encoder, input word
+  // vector and previous state
+  Linear decoder_fc({hidden_size, word_dim, hidden_size}, hidden_size, "tanh");
+  // decoder rnn output fc layer
   Linear decoder_softmax({hidden_size}, dict_size, "softmax");
   // Linear decoder_fc1({word_dim, hidden_size}, hidden_size, "tanh");
   // Linear decoder_fc2({hidden_size}, dict_size, "softmax");
@@ -148,10 +150,8 @@ TEST(NMT, TestTrainCPU) {
     auto tgt_idx = ReorderAndPad(input, -2);
 
     std::vector<VariableHandle> decoder_states;
-    std::vector<VariableHandle> decoder_hidden;
     std::vector<VariableHandle> decoder_outputs;
-    decoder_states.emplace_back(context);
-    decoder_hidden.emplace_back(fill_constant({batch_size, hidden_size}, 0.0f));
+    decoder_states.emplace_back(fill_constant({batch_size, hidden_size}, 0.0f));
 
     auto tgt_vec = embed(tgt_idx);
     auto steps = split(reshape(tgt_vec, {-1, batch_size, word_dim}, true));
@@ -161,15 +161,9 @@ TEST(NMT, TestTrainCPU) {
     }
 
     for (auto step : decoder_steps) {
-      auto step_input = decoder_fc({step, decoder_hidden.back()});
-      std::vector<VariableHandle> outputs =
-          lstm_step(step_input, decoder_states.back());
-      decoder_states.emplace_back(outputs[0]);
-      decoder_hidden.emplace_back(outputs[1]);
-      decoder_outputs.emplace_back(decoder_softmax({outputs[1]}));
-      //  auto current_state = decoder_fc1({step, decoder_states.back()});
-      //  decoder_states.emplace_back(current_state);
-      //  decoder_outputs.emplace_back(decoder_fc2({current_state}));
+      auto next_state = decoder_fc({context, step, decoder_states.back()});
+      decoder_states.emplace_back(next_state);
+      decoder_outputs.emplace_back(decoder_softmax({next_state}));
     }
 
     std::vector<VariableHandle> decoder_result;
@@ -182,26 +176,70 @@ TEST(NMT, TestTrainCPU) {
     return concat(decoder_result);
   };
 
+  /*
+    auto decoder_train = [&](VariableHandle context,
+                             VariableHandle input) -> VariableHandle {
+      std::vector<int> seq_lens = GetSeqLens(input);
+      auto tgt_idx = ReorderAndPad(input, -2);
+
+      std::vector<VariableHandle> decoder_states;
+      std::vector<VariableHandle> decoder_hidden;
+      std::vector<VariableHandle> decoder_outputs;
+      decoder_states.emplace_back(context);
+      decoder_hidden.emplace_back(fill_constant({batch_size, hidden_size},
+    0.0f));
+
+      auto tgt_vec = embed(tgt_idx);
+      auto steps = split(reshape(tgt_vec, {-1, batch_size, word_dim}, true));
+      std::vector<VariableHandle> decoder_steps;
+      for (auto step : steps) {
+        decoder_steps.emplace_back(reshape(step, {batch_size, word_dim}, true));
+      }
+
+      for (auto step : decoder_steps) {
+        auto step_input = decoder_fc({step, decoder_hidden.back()});
+        std::vector<VariableHandle> outputs =
+            lstm_step(step_input, decoder_states.back());
+        decoder_states.emplace_back(outputs[0]);
+        decoder_hidden.emplace_back(outputs[1]);
+        decoder_outputs.emplace_back(decoder_softmax({outputs[1]}));
+        //  auto current_state = decoder_fc1({step, decoder_states.back()});
+        //  decoder_states.emplace_back(current_state);
+        //  decoder_outputs.emplace_back(decoder_fc2({current_state}));
+      }
+
+      std::vector<VariableHandle> decoder_result;
+      for (int i = 0; i < batch_size; ++i) {
+        for (int j = 0; j < seq_lens[i]; ++j) {
+          decoder_result.emplace_back(gather(decoder_outputs[j], {i}));
+        }
+      }
+
+      return concat(decoder_result);
+    };
+  */
+
   int total_steps = 50000;
-  int print_steps = 200;
-  int test_steps = 100;
+  int print_steps = 50;
+  int test_steps = 50;
   float threshold = 6.6f;
-  bool model_saved = false;
+  bool model_saved = true;
 
   auto start = std::chrono::system_clock::now();
   for (int i = 0; i < total_steps; ++i) {
     // LOG(INFO) << "Train step #" << i;
+    if (model_saved) {
+      break;
+    }
 
     reset_global_tape(place);
     auto nmt_train = ReadNext(train_reader, true);
     // LOG(INFO) << nmt_train[0]->Value();
 
     auto encoder_out = encoder(nmt_train[0]);
-    LOG(INFO) << encoder_out->Value();
+    // LOG(INFO) << encoder_out->Value();
     auto rnn_out = decoder_train(encoder_out, nmt_train[1]);
-    LOG(INFO) << rnn_out->Value();
-
-    PADDLE_ENFORCE(false);
+    // LOG(INFO) << rnn_out->Value();
 
     auto trg_next_idx = nmt_train[2];
     VariableHandle cost = cross_entropy(rnn_out, trg_next_idx);
@@ -307,10 +345,8 @@ TEST(NMT, TestTrainCPU) {
     auto tgt_idx = ReorderAndPad(input, -2);
 
     std::vector<VariableHandle> decoder_states;
-    std::vector<VariableHandle> decoder_hidden;
     std::vector<VariableHandle> decoder_outputs;
-    decoder_states.emplace_back(context);
-    decoder_hidden.emplace_back(fill_constant({batch_size, hidden_size}, 0.0f));
+    decoder_states.emplace_back(fill_constant({batch_size, hidden_size}, 0.0f));
 
     auto tgt_vec = inf_embed(tgt_idx);
     auto steps = split(reshape(tgt_vec, {-1, batch_size, word_dim}, true));
@@ -320,12 +356,9 @@ TEST(NMT, TestTrainCPU) {
     }
 
     for (auto step : decoder_steps) {
-      auto step_input = inf_decoder_fc({step, decoder_hidden.back()});
-      std::vector<VariableHandle> outputs =
-          lstm_step(step_input, decoder_states.back());
-      decoder_states.emplace_back(outputs[0]);
-      decoder_hidden.emplace_back(outputs[1]);
-      decoder_outputs.emplace_back(inf_decoder_softmax({outputs[1]}));
+      auto next_state = inf_decoder_fc({context, step, decoder_states.back()});
+      decoder_states.emplace_back(next_state);
+      decoder_outputs.emplace_back(inf_decoder_softmax({next_state}));
     }
 
     std::vector<VariableHandle> decoder_result;
@@ -362,7 +395,8 @@ TEST(NMT, TestTrainCPU) {
   LOG(INFO) << "Loaded Model and inference on test set result: Avg loss is "
             << avg_loss;
 
-  PADDLE_ENFORCE_EQ(system(std::string("rm -r " + save_model_path).c_str()), 0);
+  // PADDLE_ENFORCE_EQ(system(std::string("rm -r " + save_model_path).c_str()),
+  // 0);
 }
 
 int main(int argc, char** argv) {
