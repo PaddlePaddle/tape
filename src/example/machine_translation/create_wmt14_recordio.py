@@ -38,6 +38,26 @@ def create_wmt14_recordio_files():
         fluid.recordio_writer.convert_reader_to_recordio_file(
             '/tmp/wmt14_train.recordio', reader, feeder)
 
+    with fluid.program_guard(fluid.Program(), fluid.Program()):
+        reader = paddle.batch(wmt14.test(30000), batch_size=1)
+        feeder = fluid.DataFeeder(
+            feed_list=[
+                fluid.layers.data(
+                    name='src_word_id', shape=[1], dtype='int64', lod_level=1),
+                fluid.layers.data(
+                    name='target_language_word',
+                    shape=[1],
+                    dtype='int64',
+                    lod_level=1), fluid.layers.data(
+                        name='target_language_next_word',
+                        shape=[1],
+                        dtype='int64',
+                        lod_level=1)
+            ],
+            place=fluid.CPUPlace())
+        fluid.recordio_writer.convert_reader_to_recordio_file(
+            '/tmp/wmt14_test.recordio', reader, feeder)
+
 
 if __name__ == "__main__":
     create_wmt14_recordio_files()

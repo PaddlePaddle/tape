@@ -293,6 +293,9 @@ class Embedding {
         "lookup_table", "uniform_random", attrs);
   }
 
+  explicit Embedding(const std::vector<ParameterHandle> &params)
+      : w_(params[0]) {}
+
   VariableHandle operator()(VariableHandle input) {
     VariableHandle output(new Variable("embedding"));
     get_global_tape().AddOp(
@@ -302,6 +305,8 @@ class Embedding {
         {{"is_sparse", false}, {"is_distributed", false}, {"padding_idx", -2}});
     return output;
   }
+
+  std::vector<std::string> ParamNames() { return {w_->Name()}; }
 
  private:
   ParameterHandle w_;

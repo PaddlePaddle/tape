@@ -70,11 +70,12 @@ TEST(NMT, TestTrainCPU) {
   LOG(INFO) << "Batch size is " << batch_size << std::endl;
 
   std::string save_model_path = "/tmp/NMT_model/";
-  std::string file = "/tmp/wmt14_train.recordio";
+  std::string train_file = "/tmp/wmt14_train.recordio";
+  std::string test_file = "/tmp/wmt14_test.recordio";
   auto train_reader = CreateRecordioFileReader(
-      file, {-1, 1, -1, 1, -1, 1}, {2, 2, 2}, {1, 1, 1});
+      train_file, {-1, 1, -1, 1, -1, 1}, {2, 2, 2}, {1, 1, 1});
   auto test_reader = CreateRecordioFileReader(
-      file, {-1, 1, -1, 1, -1, 1}, {2, 2, 2}, {1, 1, 1});
+      test_file, {-1, 1, -1, 1, -1, 1}, {2, 2, 2}, {1, 1, 1});
   train_reader = CreateBatchReader(train_reader, batch_size);
   test_reader = CreateBatchReader(test_reader, batch_size);
 
@@ -181,10 +182,10 @@ TEST(NMT, TestTrainCPU) {
     return concat(decoder_result);
   };
 
-  int total_steps = 20000;
-  int print_steps = 100;
-  int test_steps = 20;
-  float threshold = 5.5f;
+  int total_steps = 50000;
+  int print_steps = 200;
+  int test_steps = 100;
+  float threshold = 6.6f;
   bool model_saved = false;
 
   auto start = std::chrono::system_clock::now();
@@ -196,7 +197,11 @@ TEST(NMT, TestTrainCPU) {
     // LOG(INFO) << nmt_train[0]->Value();
 
     auto encoder_out = encoder(nmt_train[0]);
+    LOG(INFO) << encoder_out->Value();
     auto rnn_out = decoder_train(encoder_out, nmt_train[1]);
+    LOG(INFO) << rnn_out->Value();
+
+    PADDLE_ENFORCE(false);
 
     auto trg_next_idx = nmt_train[2];
     VariableHandle cost = cross_entropy(rnn_out, trg_next_idx);
@@ -205,7 +210,7 @@ TEST(NMT, TestTrainCPU) {
 
     BackwardAndUpdate(loss, &adam);
 
-    if ((i + 1) % print_steps == 0) {
+    if (i % print_steps == 0) {
       std::vector<float> losses;
       ResetReader(test_reader);
 
@@ -243,6 +248,121 @@ TEST(NMT, TestTrainCPU) {
   std::chrono::duration<double> elapsed_time = end - start;
   LOG(INFO) << "Total wall clock time is " << elapsed_time.count()
             << " seconds";
+
+  if (!model_saved) {
+    return;
+  }
+
+  // Inference using test set
+  LOG(INFO) << "Start inferencing and load parameters";
+  ParameterCollection loaded_pc(save_model_path);
+
+  // Reconstruct layers by loading the saved parameters
+  Embedding inf_embed(loaded_pc.LookUp(embed.ParamNames()));
+  Linear inf_encoder_fc(loaded_pc.LookUp(encoder_fc.ParamNames()),
+                        encoder_fc.ActName());
+  Linear inf_decoder_fc(loaded_pc.LookUp(decoder_fc.ParamNames()),
+                        decoder_fc.ActName());
+  Linear inf_decoder_softmax(loaded_pc.LookUp(decoder_softmax.ParamNames()),
+                             decoder_softmax.ActName());
+
+  auto test_encoder = [&](VariableHandle input) -> VariableHandle {
+    std::vector<int> seq_lens = GetSeqLens(input);
+    auto src_idx = ReorderAndPad(input, -2);
+    auto src_vec = inf_embed(src_idx);
+    auto steps = split(reshape(src_vec, {-1, batch_size, word_dim}, true));
+    std::vector<VariableHandle> src_steps;
+    for (auto step : steps) {
+      src_steps.emplace_back(reshape(step, {batch_size, word_dim}, true));
+    }
+
+    std::vector<VariableHandle> cell_states;
+    std::vector<VariableHandle> output_states;
+
+    VariableHandle init_cell = fill_constant({batch_size, hidden_size}, 0.0f);
+    VariableHandle init_hidden = fill_constant({batch_size, hidden_size}, 0.0f);
+
+    cell_states.emplace_back(init_cell);
+    output_states.emplace_back(init_hidden);
+
+    for (auto step : src_steps) {
+      auto step_input = inf_encoder_fc({step, output_states.back()});
+      std::vector<VariableHandle> outputs =
+          lstm_step(step_input, cell_states.back());
+      cell_states.emplace_back(outputs[0]);
+      output_states.emplace_back(outputs[1]);
+    }
+
+    std::vector<VariableHandle> encoder_output;
+    for (int i = 0; i < batch_size; ++i) {
+      encoder_output.emplace_back(gather(output_states[seq_lens[i]], {i}));
+    }
+
+    return concat(encoder_output);
+  };
+
+  auto test_decoder = [&](VariableHandle context,
+                          VariableHandle input) -> VariableHandle {
+    std::vector<int> seq_lens = GetSeqLens(input);
+    auto tgt_idx = ReorderAndPad(input, -2);
+
+    std::vector<VariableHandle> decoder_states;
+    std::vector<VariableHandle> decoder_hidden;
+    std::vector<VariableHandle> decoder_outputs;
+    decoder_states.emplace_back(context);
+    decoder_hidden.emplace_back(fill_constant({batch_size, hidden_size}, 0.0f));
+
+    auto tgt_vec = inf_embed(tgt_idx);
+    auto steps = split(reshape(tgt_vec, {-1, batch_size, word_dim}, true));
+    std::vector<VariableHandle> decoder_steps;
+    for (auto step : steps) {
+      decoder_steps.emplace_back(reshape(step, {batch_size, word_dim}, true));
+    }
+
+    for (auto step : decoder_steps) {
+      auto step_input = inf_decoder_fc({step, decoder_hidden.back()});
+      std::vector<VariableHandle> outputs =
+          lstm_step(step_input, decoder_states.back());
+      decoder_states.emplace_back(outputs[0]);
+      decoder_hidden.emplace_back(outputs[1]);
+      decoder_outputs.emplace_back(inf_decoder_softmax({outputs[1]}));
+    }
+
+    std::vector<VariableHandle> decoder_result;
+    for (int i = 0; i < batch_size; ++i) {
+      for (int j = 0; j < seq_lens[i]; ++j) {
+        decoder_result.emplace_back(gather(decoder_outputs[j], {i}));
+      }
+    }
+
+    return concat(decoder_result);
+  };
+
+  std::vector<float> losses;
+  std::vector<float> accuracies;
+  ResetReader(test_reader);
+
+  for (int i = 0; i < test_steps; ++i) {
+    reset_global_tape(place);
+
+    auto nmt_test = ReadNext(test_reader, true);
+    auto test_encoder_out = test_encoder(nmt_test[0]);
+    auto test_rnn_out = test_decoder(test_encoder_out, nmt_test[1]);
+
+    VariableHandle loss = mean(cross_entropy(test_rnn_out, nmt_test[2]));
+    get_global_tape().Forward();
+
+    losses.push_back(loss->FetchValue()
+                         ->Get<paddle::framework::LoDTensor>()
+                         .data<float>()[0]);
+  }
+
+  float avg_loss =
+      std::accumulate(losses.begin(), losses.end(), 0.0f) / losses.size();
+  LOG(INFO) << "Loaded Model and inference on test set result: Avg loss is "
+            << avg_loss;
+
+  PADDLE_ENFORCE_EQ(system(std::string("rm -r " + save_model_path).c_str()), 0);
 }
 
 int main(int argc, char** argv) {
