@@ -365,6 +365,12 @@ VariableHandle relu(VariableHandle x) {
   return out;
 }
 
+VariableHandle log(VariableHandle x) {
+  VariableHandle out(new Variable("log"));
+  get_global_tape().AddOp("log", {{"X", {x}}}, {{"Out", {out}}}, {});
+  return out;
+}
+
 VariableHandle sigmoid(VariableHandle x) {
   VariableHandle out(new Variable("sigmoid"));
   get_global_tape().AddOp("sigmoid", {{"X", {x}}}, {{"Out", {out}}}, {});
