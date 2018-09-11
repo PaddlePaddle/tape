@@ -485,7 +485,7 @@ VariableHandle concat(std::vector<VariableHandle> inputs, int axis = 0) {
 
 std::vector<VariableHandle> split(VariableHandle x) {
   // We need to known the runtime shape of x
-  x->Value();
+  get_global_tape().Forward();
   int time_steps =
       static_cast<int>(x->Get<paddle::framework::LoDTensor>().dims()[0]);
   std::vector<VariableHandle> outputs;
@@ -494,10 +494,6 @@ std::vector<VariableHandle> split(VariableHandle x) {
   }
   get_global_tape().AddOp(
       "split", {{"X", {x}}}, {{"Out", outputs}}, {{"num", time_steps}});
-  //  for (auto out : outputs) {
-  //    LOG(INFO) << out->Name();
-  //    LOG(INFO) << out->Value();
-  //  }
 
   return outputs;
 }
