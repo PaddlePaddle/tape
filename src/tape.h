@@ -35,33 +35,17 @@ std::ostream &operator<<(std::ostream &, const Variable &);
 
 class Variable {
  public:
-  explicit Variable(const std::string pre_fix)
-      : name_(pre_fix + std::to_string(count())) {}
+  explicit Variable(const std::string &pre_fix);
 
   enum Suffix { COUNT, GRAD, NONE };
-  Variable(const std::string pre_fix, Suffix suffix) {
-    if (suffix == Suffix::COUNT) {
-      name_ = pre_fix + std::to_string(count());
-    } else if (suffix == Suffix::GRAD) {
-      name_ = pre_fix + framework::kGradVarSuffix;
-    } else {
-      name_ = pre_fix;
-    }
-  }
+  Variable(const std::string &pre_fix, Suffix suffix);
 
   ~Variable() { VLOG(10) << "Deleting " << Name(); }
 
   bool GradExist() { return !grad_.expired(); }
 
-  VariableHandle Grad() {
-    if (grad_.expired()) {
-      VariableHandle new_grad(new Variable(name_, Suffix::GRAD));
-      grad_ = new_grad;
-      return new_grad;
-    } else {
-      return VariableHandle(grad_);
-    }
-  }
+  // Return the gradient of a Variable
+  VariableHandle Grad();
 
   // Evaluate a variable by running Forward() on the global tape
   const Variable &Value();
@@ -69,7 +53,6 @@ class Variable {
   // Evaluate and make a copy of Variable data on CPU
   VariableHandle FetchValue();
 
-  // TODO(tonyyang-svail): No need to expose name
   std::string Name() const { return name_; }
 
   const framework::Variable &Var() const { return var_; }
@@ -86,11 +69,6 @@ class Variable {
   }
 
  private:
-  int64_t count() {
-    static int64_t counter = 0;
-    return counter++;
-  }
-
   std::string name_;
   framework::Variable var_;
 
