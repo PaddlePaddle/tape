@@ -50,10 +50,10 @@ using paddle::tape::ResetReader;
 
 TEST(Cifar, TestGPU) {
   // auto place = paddle::platform::CPUPlace();
-  auto place = paddle::platform::CUDAPlace(0);
+  auto place = paddle::platform::CUDAPlace(1);
   reset_global_tape(place);
 
-  const int batch_size = 128;
+  const int batch_size = 64;
   LOG(INFO) << "Batch size is " << batch_size << std::endl;
 
   std::string save_model_path = "/tmp/cifar_model/";
@@ -119,10 +119,10 @@ TEST(Cifar, TestGPU) {
   BatchNorm bn5_3(512, "relu");
 
   // Input dim 512x1x1 = 512
-  Linear fc1(512, 512);
+  Linear fc1({512}, 512);
   BatchNorm bn6(512, "relu");
-  Linear fc2(512, 512);
-  Linear fc3(512, 10, "softmax");
+  Linear fc2({512}, 512);
+  Linear fc3({512}, 10, "softmax");
 
   Adam adam(0.001);
 
@@ -153,19 +153,19 @@ TEST(Cifar, TestGPU) {
     auto pool5 = pool2d(bn5_3(conv5_3(temp5_2), bn_attrs));
 
     d_attrs["dropout_prob"] = 0.5f;
-    auto temp6 = bn6(fc1(dropout(pool5, d_attrs)), bn_attrs);
-    return fc3(fc2(dropout(temp6, d_attrs)));
+    auto temp6 = bn6(fc1({dropout(pool5, d_attrs)}), bn_attrs);
+    return fc3({fc2({dropout(temp6, d_attrs)})});
   };
 
   int total_steps = 100000;
   int test_steps = 1000;
   int print_step = 100;
-  float threshold = 0.8f;
+  float threshold = 0.3f;
 
   int iter_num = 1050;
   int skip_batch_num = 50;
   bool model_saved = false;
-  bool do_benchmark = true;
+  bool do_benchmark = false;
 
   auto start = std::chrono::system_clock::now();
   int num_samples = 0;
@@ -332,8 +332,8 @@ TEST(Cifar, TestGPU) {
     auto pool5 = pool2d(inf_bn5_3(inf_conv5_3(temp5_2), bn_attrs));
 
     d_attrs["dropout_prob"] = 0.5f;
-    auto temp6 = inf_bn6(inf_fc1(dropout(pool5, d_attrs)), bn_attrs);
-    return inf_fc3(inf_fc2(dropout(temp6, d_attrs)));
+    auto temp6 = inf_bn6(inf_fc1({dropout(pool5, d_attrs)}), bn_attrs);
+    return inf_fc3({inf_fc2({dropout(temp6, d_attrs)})});
   };
 
   std::vector<float> losses;

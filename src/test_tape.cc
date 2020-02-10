@@ -167,8 +167,8 @@ TEST(Tape, TestConv) {
 }
 
 TEST(Tape, TestMLP) {
-  Linear linear1(3, 3, "relu");
-  Linear linear2(3, 3, "relu");
+  Linear linear1({3}, 3, "relu");
+  Linear linear2({3}, 3, "relu");
 
   SGD sgd(0.001);
 
@@ -185,7 +185,7 @@ TEST(Tape, TestMLP) {
     reset_global_tape();
 
     auto input = filler();
-    auto loss = mean(linear2(linear1(input)));
+    auto loss = mean(linear2({linear1({input})}));
     LOG(INFO) << loss->Value();
 
     BackwardAndUpdate(loss, &sgd);
@@ -194,8 +194,8 @@ TEST(Tape, TestMLP) {
 
 TEST(Tape, TestSaveLoadLayer) {
   std::string file_path = "/tmp/test_layer_save_load/";
-  Linear linear1(3, 6, "relu");
-  Linear linear2(6, 3);
+  Linear linear1({3}, 6, "relu");
+  Linear linear2({6}, 3);
 
   auto& global_pc = GlobalParameterCollection();
   global_pc.SaveAllParameters(file_path);

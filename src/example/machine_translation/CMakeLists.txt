@@ -13,6 +13,6 @@
 # limitations under the License.
 #
 
-add_subdirectory(mnist)
-add_subdirectory(cifar)
-add_subdirectory(machine_translation)
+cc_test(test_machine_translation
+        SRCS test_machine_translation.cc
+        DEPS tape tape_function tape_optimizer)
